@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Valutazioni cavalli · Versione dimostrativa</title>
+<link rel="stylesheet" href="assets/style.css">
+<style>
+.demo{background:var(--silk);color:var(--silk-ink);font-size:15px}
+.demo div{max-width:1180px;margin:0 auto;padding:8px 20px;display:flex;gap:8px 16px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+.demo button{font:600 14px/1 var(--sans);background:transparent;color:inherit;border:1px solid currentColor;border-radius:6px;padding:6px 10px;cursor:pointer}
+</style>
+</head>
+<body>
+<div class="demo"><div><span><b>Versione dimostrativa.</b> Cavalli, corse e classi sono di fantasia; le modifiche restano solo in questo browser.</span><button id="demoReset" type="button">Ripristina dati di esempio</button></div></div>
+<header>
+  <div class="bar">
+    <h1>Valutazioni cavalli</h1>
+    <nav id="nav">
+      <button data-view="classifica" aria-current="page">Classifica</button>
+      <button data-view="corse">Corse</button>
+      <button data-view="cavalli">Cavalli</button>
+      <button data-view="impostazioni">Impostazioni</button>
+    </nav>
+  </div>
+</header>
+<main id="main"><p class="meta">Caricamento archivio…</p></main>
+<dialog id="dlgCavallo" class="narrow"></dialog>
+<dialog id="dlgScheda"></dialog>
+<dialog id="dlgCorsa"></dialog>
+<dialog id="dlgClasse" class="narrow"></dialog>
+<dialog id="dlgRettifica" class="narrow"></dialog>
+<datalist id="dl-razze"></datalist><datalist id="dl-finimenti"></datalist>
+<datalist id="dl-fantini"></datalist><datalist id="dl-allenatori"></datalist><datalist id="dl-proprietari"></datalist><datalist id="dl-ippodromi"></datalist>
+<div id="toast" role="status" aria-live="polite"></div>
+<script src="assets/exceljs.min.js"></script>
+<script src="assets/dati-esempio.js"></script>
+<script src="assets/api-demo.js"></script>
+<script src="assets/app.js"></script>
+</body>
+</html>
