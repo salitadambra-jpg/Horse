@@ -94,3 +94,7 @@ section+section{margin-top:34px}
 .runners-free input.manuale,input.manuale{width:96px;text-align:right;display:inline-block;margin:0;padding:6px 8px}
 input.manuale.attivo{border-color:var(--silk);box-shadow:0 0 0 1px var(--silk)}
 td.num{white-space:nowrap}
+tr.alert td{background:var(--warn-bg)}
+input.pos{width:56px;min-width:56px;text-align:center}
+.notice a{color:inherit;font-weight:600}
+.runners td:first-child{min-width:180px}

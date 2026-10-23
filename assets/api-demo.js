@@ -1,6 +1,6 @@
 // Sostituisce le funzioni del programma desktop con equivalenti nel browser.
 (function () {
-  const KEY = "valutazioni-cavalli-demo";
+  const KEY = "valutazioni-cavalli-demo-v2";
   const scarica = (blob, nome) => {
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob); a.download = nome;
@@ -29,6 +29,23 @@
     async scegliCartellaBackup() { alert("Nella versione desktop qui si sceglie la cartella dei backup, anche su OneDrive o Google Drive."); return null; },
     async ripristina() { return { errore: "Nella versione dimostrativa il ripristino non è disponibile" }; },
     async mostraFile() {},
+    // Sceglie un file dal computer e ne estrae le righe di testo (PDF, Excel, CSV, TXT)
+    leggiIscritti() {
+      return new Promise(resolve => {
+        const inp = document.createElement("input");
+        inp.type = "file"; inp.accept = ".pdf,.xlsx,.csv,.txt";
+        inp.addEventListener("cancel", () => resolve({ annullato: true }));
+        inp.addEventListener("change", async () => {
+          const f = inp.files[0];
+          if (!f) return resolve({ annullato: true });
+          try {
+            const righe = await leggiFile(f);
+            resolve(righe.length ? { nome: f.name, righe } : { errore: "Nel file non c'è testo leggibile. Se il PDF è una scansione, serve la versione digitale o un Excel." });
+          } catch (e) { console.error(e); resolve({ errore: "Impossibile leggere il file scelto." }); }
+        });
+        inp.click();
+      });
+    },
     async esportaExcel(doc) {
       const wb = new ExcelJS.Workbook();
       wb.creator = "Valutazioni cavalli";
@@ -52,6 +69,41 @@
       return { file: "scaricato" };
     },
   };
+
+  async function leggiFile(f) {
+    const ext = f.name.toLowerCase().split(".").pop();
+    let righe = [];
+    if (ext === "pdf") {
+      const base = new URL("assets/pdfjs/", location.href).href;
+      const pdfjs = await import(base + "pdf.min.mjs");
+      pdfjs.GlobalWorkerOptions.workerSrc = base + "pdf.worker.min.mjs";
+      const doc = await pdfjs.getDocument({ data: new Uint8Array(await f.arrayBuffer()), isEvalSupported: false }).promise;
+      for (let n = 1; n <= doc.numPages; n++) {
+        const { items } = await (await doc.getPage(n)).getTextContent();
+        const gruppi = [];
+        for (const it of items) {
+          if (!it.str || !it.str.trim()) continue;
+          const y = it.transform[5];
+          let g = gruppi.find(g => Math.abs(g.y - y) < 3);
+          if (!g) { g = { y, pezzi: [] }; gruppi.push(g); }
+          g.pezzi.push({ x: it.transform[4], s: it.str });
+        }
+        gruppi.sort((a, b) => b.y - a.y).forEach(g => righe.push(g.pezzi.sort((a, b) => a.x - b.x).map(p => p.s.trim()).join("  ")));
+      }
+      await doc.destroy();
+    } else if (ext === "xlsx") {
+      const wb = new ExcelJS.Workbook();
+      await wb.xlsx.load(await f.arrayBuffer());
+      wb.eachSheet(ws => ws.eachRow(r => {
+        const v = (r.values || []).slice(1).map(c => (c && typeof c === "object") ? (c.text ?? c.result ?? "") : (c ?? "")).map(String).filter(x => x.trim());
+        if (v.length) righe.push(v.join("  "));
+      }));
+    } else {
+      righe = (await f.text()).split(/\r?\n/).map(r => r.replace(/[;,\t]/g, "  "));
+    }
+    return righe.map(r => r.replace(/\s+/g, " ").trim()).filter(Boolean);
+  }
+  window.__leggiFileDemo = leggiFile; // usato solo per i test
 
   document.addEventListener("click", e => {
     if (e.target.closest("#demoReset") && confirm("Ripristinare i dati di esempio? Le modifiche fatte in questa prova andranno perse.")) {

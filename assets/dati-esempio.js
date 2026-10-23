@@ -5,81 +5,111 @@ window.DATI_ESEMPIO = {
    "id": "fulmine",
    "nome": "Fulmine",
    "razza": "Anglo-arabo",
-   "nascita": "2021-04-02",
    "ratingIniziale": 90,
-   "note": ""
+   "note": "",
+   "annoNascita": 2021,
+   "proprietario": "Scuderia Ortigia",
+   "allenatore": "G. Bianchi"
   },
   "freccia": {
    "id": "freccia",
    "nome": "Freccia",
    "razza": "Anglo-arabo",
-   "nascita": "2020-03-11",
    "ratingIniziale": 82,
-   "note": ""
+   "note": "",
+   "annoNascita": 2020,
+   "proprietario": "Allevamento Iblei",
+   "allenatore": "C. Puglisi"
   },
   "vento": {
    "id": "vento",
    "nome": "Vento",
    "razza": "Anglo-arabo",
-   "nascita": "2022-05-20",
    "ratingIniziale": 79,
-   "note": ""
+   "note": "",
+   "annoNascita": 2022,
+   "proprietario": "Scuderia Ortigia",
+   "allenatore": "G. Bianchi"
   },
   "scirocco": {
    "id": "scirocco",
    "nome": "Scirocco",
    "razza": "Purosangue inglese",
-   "nascita": "2021-02-14",
    "ratingIniziale": 86,
-   "note": ""
+   "note": "",
+   "annoNascita": 2021,
+   "proprietario": "Scuderia Val di Noto",
+   "allenatore": "F. Amato"
   },
   "ortigia": {
    "id": "ortigia",
    "nome": "Ortigia",
    "razza": "Anglo-arabo",
-   "nascita": "2022-03-30",
    "ratingIniziale": 75,
-   "note": ""
+   "note": "",
+   "annoNascita": 2022,
+   "proprietario": "R. Messina",
+   "allenatore": "C. Puglisi"
   },
   "etna": {
    "id": "etna",
    "nome": "Etna",
    "razza": "Purosangue inglese",
-   "nascita": "2020-04-18",
    "ratingIniziale": 88,
-   "note": ""
+   "note": "",
+   "annoNascita": 2020,
+   "proprietario": "Scuderia Val di Noto",
+   "allenatore": "F. Amato"
   },
   "ciclope": {
    "id": "ciclope",
    "nome": "Ciclope",
    "razza": "Anglo-arabo",
-   "nascita": "2021-05-09",
    "ratingIniziale": 72,
-   "note": ""
+   "note": "",
+   "annoNascita": 2021,
+   "proprietario": "Allevamento Iblei",
+   "allenatore": "G. Bianchi"
   },
   "aretusa": {
    "id": "aretusa",
    "nome": "Aretusa",
    "razza": "Purosangue inglese",
-   "nascita": "2021-03-21",
    "ratingIniziale": 84,
-   "note": ""
+   "note": "",
+   "annoNascita": 2021,
+   "proprietario": "R. Messina",
+   "allenatore": "F. Amato"
   },
   "plemmirio": {
    "id": "plemmirio",
    "nome": "Plemmirio",
    "razza": "Anglo-arabo",
-   "nascita": "2020-02-27",
    "ratingIniziale": 77,
-   "note": ""
+   "note": "",
+   "annoNascita": 2020,
+   "proprietario": "Scuderia Ortigia",
+   "allenatore": "C. Puglisi"
   },
   "libeccio": {
    "id": "libeccio",
    "nome": "Libeccio",
    "razza": "Anglo-arabo",
-   "nascita": "2022-04-12",
    "ratingIniziale": 70,
-   "note": ""
+   "note": "",
+   "annoNascita": 2022,
+   "proprietario": "Allevamento Iblei",
+   "allenatore": "G. Bianchi"
+  },
+  "maestrale": {
+   "id": "maestrale",
+   "nome": "Maestrale",
+   "razza": "Anglo-arabo",
+   "annoNascita": 2022,
+   "ratingIniziale": "",
+   "proprietario": "Scuderia Val di Noto",
+   "allenatore": "F. Amato",
+   "note": "Nuovo in archivio: rating da decidere"
   }
  },
  "classi": {
@@ -425,6 +455,18 @@ window.DATI_ESEMPIO = {
      "allenatore": "C. Puglisi",
      "proprietario": "Scuderia Ortigia",
      "ratingManuale": ""
+    },
+    {
+     "cavalloId": "maestrale",
+     "posizione": 5,
+     "distacco": 1.5,
+     "steccato": 5,
+     "finimenti": "",
+     "pesoFantino": 53,
+     "fantino": "S. Russo",
+     "allenatore": "F. Amato",
+     "proprietario": "Scuderia Val di Noto",
+     "ratingManuale": ""
     }
    ]
   },
@@ -472,6 +514,18 @@ window.DATI_ESEMPIO = {
      "allenatore": "G. Bianchi",
      "proprietario": "Allevamento Iblei",
      "ratingManuale": ""
+    },
+    {
+     "cavalloId": "maestrale",
+     "posizione": 4,
+     "distacco": 1,
+     "steccato": 4,
+     "finimenti": "",
+     "pesoFantino": 53,
+     "fantino": "S. Russo",
+     "allenatore": "F. Amato",
+     "proprietario": "Scuderia Val di Noto",
+     "ratingManuale": ""
     }
    ]
   }
@@ -492,7 +546,18 @@ window.DATI_ESEMPIO = {
    "tetto": 5,
    "fattoreVincitore": 0.5,
    "minimoVincitore": 1,
-   "arrotondamento": 1
+   "arrotondamento": 1,
+   "sogliaAvviso": 5,
+   "corseValutazione": 2,
+   "etaDiscarico": 4,
+   "discarico": {
+    "7": 3,
+    "8": 2.5,
+    "9": 2,
+    "10": 1.5,
+    "11": 1,
+    "12": 0.5
+   }
   },
   "backup": {
    "giorni": 1,
