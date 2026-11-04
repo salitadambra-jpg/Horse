@@ -8,9 +8,11 @@ Tutti i dati (cavalli, corse, classi, fantini, proprietari) sono di fantasia.
 2. **Corse**: apri il *Premio Pantalica*. Sotto "Effetto sul rating" vedi pesi assegnati, kg di distacco e rating proposto; per Vento il rating è stato deciso a mano.
 3. **Cavalli**: apri *Scirocco* per vedere lo storico con la rettifica manuale di luglio.
 4. **Nuova corsa**: inserisci una corsa e guarda il rating aggiornarsi mentre compili l'ordine d'arrivo.
-5. **Importa iscritti**: apri "Nuova corsa" → "Importa iscritti". Incolla la stampa degli iscritti (o apri il PDF di esempio, link nel banner giallo) e scegli la corsa: data, ippodromo, nome, classe e distanza si compilano da soli. Usa la ricerca per trovare i partenti, scrivi l'arrivo e premi "Ordina per arrivo": gli altri iscritti vengono tolti e solo i partenti nuovi entrano in archivio.
-6. **Cavalli da valutare**: *Maestrale* è un cavallo nuovo senza rating, con già 2 corse. La classifica lo segnala.
-7. **Impostazioni**: regole di calcolo, soglia di avviso e discarico per età dei 4 anni; tutta la classifica si ricalcola.
+5. **Importa cavalli**: in Classifica, "Importa cavalli da Excel" con il file di esempio (colonne nome, anno, rating; anno vuoto = 5 anni o più).
+6. **Importa iscritti**: apri "Nuova corsa" → "Importa iscritti". Incolla la stampa degli iscritti (o apri il PDF di esempio) e scegli la corsa: data, ippodromo, nome, classe e distanza si compilano da soli. Spunta "Parte" per i partenti (usa la ricerca) e premi "Togli i non partenti". Le sigle MS e AA non contano; la nazionalità (es. IRE) sì.
+7. **Verifica**: dopo l'arrivo spunta "Verificato" per ogni partente; le righe non verificate restano evidenziate.
+8. **Cavalli da valutare**: *Maestrale* è un cavallo nuovo senza rating, con già 2 corse. La classifica lo segnala.
+9. **Impostazioni**: regole di calcolo, soglia di avviso e discarico per età dei 4 anni; tutta la classifica si ricalcola.
 
 Il pulsante "Ripristina dati di esempio" in alto riporta la demo allo stato iniziale.
 

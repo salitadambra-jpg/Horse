@@ -1,6 +1,6 @@
 // Sostituisce le funzioni del programma desktop con equivalenti nel browser.
 (function () {
-  const KEY = "valutazioni-cavalli-demo-v2";
+  const KEY = "valutazioni-cavalli-demo-v3";
   const scarica = (blob, nome) => {
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob); a.download = nome;
@@ -29,6 +29,32 @@
     async scegliCartellaBackup() { alert("Nella versione desktop qui si sceglie la cartella dei backup, anche su OneDrive o Google Drive."); return null; },
     async ripristina() { return { errore: "Nella versione dimostrativa il ripristino non è disponibile" }; },
     async mostraFile() {},
+    // Tabella cavalli da Excel o CSV: restituisce le righe come elenchi di celle
+    leggiTabella() {
+      return new Promise(resolve => {
+        const inp = document.createElement("input");
+        inp.type = "file"; inp.accept = ".xlsx,.csv,.txt";
+        inp.addEventListener("cancel", () => resolve({ annullato: true }));
+        inp.addEventListener("change", async () => {
+          const f = inp.files[0];
+          if (!f) return resolve({ annullato: true });
+          try {
+            let righe = [];
+            if (f.name.toLowerCase().endsWith(".xlsx")) {
+              const wb = new ExcelJS.Workbook(); await wb.xlsx.load(await f.arrayBuffer());
+              const ws = wb.worksheets[0];
+              ws.eachRow({ includeEmpty: false }, row => { const v = []; for (let i = 1; i <= ws.columnCount; i++) { const c = row.getCell(i).value; v.push(c === null || c === undefined ? "" : typeof c === "object" ? (c.text ?? c.result ?? (c.richText ? c.richText.map(t => t.text).join("") : "")) : c); } righe.push(v); });
+            } else {
+              const testo = (await f.text()).replace(/^\uFEFF/, "");
+              const sep = (testo.split("\n")[0].match(/;/g) || []).length ? ";" : testo.includes("\t") ? "\t" : ",";
+              righe = testo.split(/\r?\n/).map(l => l.split(sep).map(x => x.trim().replace(/^"|"$/g, "")));
+            }
+            resolve({ nome: f.name, righe });
+          } catch (e) { console.error(e); resolve({ errore: "Impossibile leggere il file scelto." }); }
+        });
+        inp.click();
+      });
+    },
     // Sceglie un file dal computer e ne estrae le righe di testo (PDF, Excel, CSV, TXT)
     leggiIscritti() {
       return new Promise(resolve => {

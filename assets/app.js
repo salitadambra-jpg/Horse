@@ -1,7 +1,7 @@
 "use strict";
 // ================= Stato =================
-const DISCARICO_DEFAULT = { 7: 3, 8: 2.5, 9: 2, 10: 1.5, 11: 1, 12: 0.5 };
-const MESI = { 7: "Luglio", 8: "Agosto", 9: "Settembre", 10: "Ottobre", 11: "Novembre", 12: "Dicembre" };
+const DISCARICO_DEFAULT = { 1: 6, 2: 5.5, 3: 5, 4: 4.5, 5: 4, 6: 3.5, 7: 3, 8: 2.5, 9: 2, 10: 1.5, 11: 1, 12: 0.5 };
+const MESI = { 1: "Gennaio", 2: "Febbraio", 3: "Marzo", 4: "Aprile", 5: "Maggio", 6: "Giugno", 7: "Luglio", 8: "Agosto", 9: "Settembre", 10: "Ottobre", 11: "Novembre", 12: "Dicembre" };
 const REGOLE_DEFAULT = { kgQuarto: 1, tetto: 5, fattoreVincitore: 0.5, minimoVincitore: 1, arrotondamento: 1,
   sogliaAvviso: 5, corseValutazione: 2, etaDiscarico: 4, discarico: { ...DISCARICO_DEFAULT } };
 const BACKUP_DEFAULT = { giorni: 1, conserva: 30, dir: "" };
@@ -28,6 +28,10 @@ function normalizza(d) {
   out.impostazioni.regole.discarico = { ...DISCARICO_DEFAULT, ...(out.impostazioni.regole.discarico || {}) };
   delete out.regole;
   out.rettifiche = out.rettifiche || {};
+  Object.values(out.corse || {}).forEach(k => (k.partecipanti || []).forEach(p => {
+    if (p.verificato === undefined) p.verificato = true;
+    if (p.parte === undefined) p.parte = true;
+  }));
   // Dalla 1.2 dei cavalli si registra solo l'anno di nascita
   Object.values(out.cavalli || {}).forEach(c => {
     if (c.nascita && !c.annoNascita) c.annoNascita = Number(String(c.nascita).slice(0, 4));
@@ -97,10 +101,11 @@ function calcola(listaCorse = Object.values(S.corse), fino = null) {
     const arrivati = parts.filter(p => Number(p.posizione) > 0).sort((a, b) => Number(a.posizione) - Number(b.posizione));
     // Discarico per età: i cavalli dell'età indicata, da luglio a dicembre, se corrono con cavalli più anziani
     const anno = Number((corsa.data || "").slice(0, 4)), mese = Number((corsa.data || "").slice(5, 7));
-    const etaDi = p => { const a = Number(S.cavalli[p.cavalloId]?.annoNascita); return a ? anno - a : null; };
+    // 99 = "5 anni o più" (anno di nascita non indicato)
+    const etaDi = p => { const c = S.cavalli[p.cavalloId]; const a = Number(c?.annoNascita); return a ? anno - a : c?.adulto ? 99 : null; };
     const etaD = Number(r.etaDiscarico) || 0;
     const conPiuAnziani = parts.some(p => etaDi(p) !== null && etaDi(p) > etaD);
-    const discaricoDi = p => (etaD && etaDi(p) === etaD && conPiuAnziani && mese >= 7 && mese <= 12) ? Number(r.discarico?.[mese]) || 0 : 0;
+    const discaricoDi = p => (etaD && etaDi(p) === etaD && conPiuAnziani && mese >= 1 && mese <= 12) ? Number(r.discarico?.[mese]) || 0 : 0;
     const cum = new Map(); let acc = 0;
     arrivati.forEach((p, i) => { if (i > 0) acc += (Number(p.distacco) || 0) / 0.25 * kgQ; cum.set(p, acc); });
     const out = [];
@@ -130,7 +135,8 @@ function calcola(listaCorse = Object.values(S.corse), fino = null) {
 }
 
 // ================= Anagrafica =================
-const etaAl = (c, rif = oggi()) => c.annoNascita ? Number(rif.slice(0, 4)) - Number(c.annoNascita) : "";
+const etaAl = (c, rif = oggi()) => c.annoNascita ? Number(rif.slice(0, 4)) - Number(c.annoNascita) : c.adulto ? "5+" : "";
+const etaTesto = n => n === 99 ? "5+" : n ?? "";
 const proprietarioDi = c => c.proprietario || ultimoDato(c.id)?.proprietario || "";
 const allenatoreDi = c => c.allenatore || ultimoDato(c.id)?.allenatore || "";
 const nomeCavallo = id => S.cavalli[id]?.nome || "—";
@@ -169,14 +175,14 @@ function datiClassifica(rif) {
     .map(c => { const st = storia[c.id]; return { c, rating: rating[c.id], corse: st.filter(x => x.tipo === "corsa").length, ultima: st[st.length - 1] }; });
 }
 function vClassifica() {
-  if (!Object.keys(S.cavalli).length) return `<div class="head"><h2>Classifica generale</h2></div><div class="empty"><p>Nessun cavallo in archivio.</p><button class="btn primary" data-act="nuovo-cavallo">Aggiungi il primo cavallo</button></div>`;
+  if (!Object.keys(S.cavalli).length) return `<div class="head"><h2>Classifica generale</h2></div><div class="empty"><p>Nessun cavallo in archivio.</p><div class="toolbar" style="justify-content:center"><button class="btn primary" data-act="importa-cavalli">Importa cavalli da Excel</button><button class="btn" data-act="nuovo-cavallo">Aggiungi un cavallo</button></div></div>`;
   const rows = datiClassifica(dataRif);
   const nCorse = Object.values(S.corse).filter(k => k.data <= dataRif).length;
   const soglia = Number(R().corseValutazione) || 0;
   const pronti = rows.filter(x => x.rating === null && soglia && x.corse >= soglia);
   return `<div class="head"><div><h2>Classifica generale al ${fmtData(dataRif)}</h2><p class="hint">Rating in kg calcolati sulle ${nCorse} corse disputate fino a questa data.</p></div>
     <div class="refdate"><label>Data di riferimento<input type="date" id="dataRif" value="${dataRif}" max="9999-12-31"></label>
-    <button class="btn" data-act="oggi">Oggi</button><button class="btn primary" data-act="excel-classifica">Esporta in Excel</button></div></div>
+    <button class="btn" data-act="oggi">Oggi</button><button class="btn" data-act="importa-cavalli">Importa cavalli da Excel</button><button class="btn primary" data-act="excel-classifica">Esporta in Excel</button></div></div>
   ${pronti.length ? `<div class="notice"><b>Da valutare:</b> ${pronti.map(x => `<a href="#" data-scheda="${x.c.id}">${esc(x.c.nome)}</a>`).join(", ")} ${pronti.length === 1 ? "ha" : "hanno"} già ${soglia} o più corse e ${pronti.length === 1 ? "aspetta" : "aspettano"} il rating. Apri la scheda e usa «Rettifica rating».</div>` : ""}
   <div class="scroll"><table><thead><tr><th class="num">#</th><th>Cavallo</th><th>Razza</th><th class="num">Età</th><th class="num">Corse</th><th class="num">Ultima variazione</th><th class="num">Rating</th></tr></thead><tbody>
   ${rows.map((x, i) => `<tr class="link" data-scheda="${x.c.id}"><td class="num">${x.rating === null ? "" : i + 1}</td><td><b>${esc(x.c.nome)}</b></td><td>${esc(x.c.razza)}</td><td class="num">${etaAl(x.c, dataRif)}</td><td class="num">${x.corse}</td>
@@ -201,8 +207,8 @@ function vCorse() {
   if (!nCl || !nCav) return head + `<div class="empty"><p>Per inserire una corsa servono almeno ${!nCl ? "una classe" : ""}${!nCl && !nCav ? " e " : ""}${!nCav ? "un cavallo" : ""}.</p>
     <button class="btn primary" data-act="${!nCl ? "vai-impostazioni" : "nuovo-cavallo"}">${!nCl ? "Crea una classe" : "Aggiungi un cavallo"}</button></div>`;
   if (!list.length) return head + `<div class="empty"><p>Nessuna corsa inserita.</p><button class="btn primary" data-act="nuova-corsa">Inserisci la prima corsa</button></div>`;
-  return head + `<div class="scroll"><table><thead><tr><th>Data</th><th>Corsa</th><th>Ippodromo</th><th>Classe</th><th class="num">Distanza</th><th class="num">Partenti</th><th>Vincitore</th></tr></thead><tbody>
-  ${list.map(k => { const v = (k.partecipanti || []).find(p => Number(p.posizione) === 1); return `<tr class="link" data-corsa="${k.id}"><td>${fmtData(k.data)}</td><td><b>${esc(k.nome || "Senza nome")}</b></td><td>${esc(k.ippodromo)}</td><td>${esc(S.classi[k.classeId]?.nome || "—")}</td><td class="num">${k.distanza ? esc(k.distanza) + " m" : ""}</td><td class="num">${(k.partecipanti || []).length}</td><td>${v ? esc(nomeCavallo(v.cavalloId)) : "—"}</td></tr>`; }).join("")}
+  return head + `<div class="scroll"><table><thead><tr><th>Data</th><th>Corsa</th><th>Ippodromo</th><th>Classe</th><th class="num">Distanza</th><th class="num">Partenti</th><th>Vincitore</th><th>Rating</th></tr></thead><tbody>
+  ${list.map(k => { const v = (k.partecipanti || []).find(p => Number(p.posizione) === 1); return `<tr class="link" data-corsa="${k.id}"><td>${fmtData(k.data)}</td><td><b>${esc(k.nome || "Senza nome")}</b></td><td>${esc(k.ippodromo)}</td><td>${esc(S.classi[k.classeId]?.nome || "—")}</td><td class="num">${k.distanza ? esc(k.distanza) + " m" : ""}</td><td class="num">${(k.partecipanti || []).length}</td><td>${v ? esc(nomeCavallo(v.cavalloId)) : "—"}</td><td>${(() => { const n = (k.partecipanti || []).filter(daVerificare).length; return n ? `<span class="tag avviso">${n} da verificare</span>` : "verificati"; })()}</td></tr>`; }).join("")}
   </tbody></table></div>`;
 }
 
@@ -231,7 +237,7 @@ function vImpostazioni() {
         <label>Arrotonda a (kg)<select name="arrotondamento">${[[1, "1 kg"], [0.5, "0,5 kg"], [0.25, "0,25 kg"], [0, "Nessun arrotondamento"]].map(([v, t]) => `<option value="${v}" ${Number(r.arrotondamento) === v ? "selected" : ""}>${t}</option>`).join("")}</select></label>
       </div>
       <p class="hint">Il vincitore sale della quota indicata dei kg di margine sul secondo, mai meno del minimo. Gli altri scendono dei kg cumulati dal primo. Variazione massima 0 = nessun limite; avviso 0 = nessun avviso. I non arrivati e i cavalli da valutare non cambiano rating.</p>
-      <h3>Discarico per età</h3>
+      <h3>Discarico per età (da gennaio a dicembre)</h3>
       <div class="grid">
         <label>Età che riceve il discarico (anni)<input type="number" step="1" min="0" name="etaDiscarico" value="${esc(r.etaDiscarico)}"></label>
         ${Object.entries(MESI).map(([m, nome]) => `<label>${nome} (kg)<input type="number" step="0.25" min="0" name="d${m}" value="${esc(r.discarico?.[m] ?? 0)}"></label>`).join("")}
@@ -284,7 +290,8 @@ function apriCavallo(id) {
   <form class="dlg-body">
     <div class="grid">
       <label style="grid-column:1/-1">Nome<input name="nome" required value="${esc(c.nome)}" autocomplete="off"></label>
-      <label>Anno di nascita<input type="number" name="annoNascita" min="1990" max="2100" step="1" value="${esc(c.annoNascita)}"></label>
+      <label>Anno di nascita<input type="number" name="annoNascita" min="1990" max="2100" step="1" value="${esc(c.annoNascita)}">
+        <span style="display:flex;gap:6px;align-items:center;margin-top:4px;font-weight:400"><input type="checkbox" name="adulto" ${c.adulto ? "checked" : ""} style="width:auto;margin:0">5 anni o più (anno non noto)</span></label>
       <label>Razza<input name="razza" list="dl-razze" value="${esc(c.razza)}"></label>
       <label>Rating iniziale (kg)<input type="number" step="0.25" min="0" name="ratingIniziale" value="${esc(c.ratingIniziale)}" placeholder="da valutare"></label>
       <label>Proprietario attuale<input name="proprietario" list="dl-proprietari" value="${esc(c.proprietario)}"></label>
@@ -298,8 +305,8 @@ function apriCavallo(id) {
     e.preventDefault();
     const f = Object.fromEntries(new FormData(e.target));
     const nome = f.nome.trim();
-    if (Object.values(S.cavalli).some(x => x.nome.toLowerCase() === nome.toLowerCase() && x.id !== id)) return toast("Esiste già un cavallo con questo nome");
-    const obj = { ...(id ? S.cavalli[id] : {}), id: id || uid(), nome, annoNascita: f.annoNascita ? Number(f.annoNascita) : "", razza: f.razza.trim(),
+    if (Object.values(S.cavalli).some(x => chiave(x.nome) === chiave(nome) && x.id !== id)) return toast("Esiste già un cavallo con questo nome (stessa nazionalità)");
+    const obj = { ...(id ? S.cavalli[id] : {}), id: id || uid(), nome, annoNascita: f.annoNascita ? Number(f.annoNascita) : "", adulto: !f.annoNascita && !!f.adulto, razza: f.razza.trim(),
       ratingIniziale: f.ratingIniziale === "" ? "" : Number(f.ratingIniziale), proprietario: f.proprietario.trim(), allenatore: f.allenatore.trim(), note: f.note.trim() };
     S.cavalli[obj.id] = obj; salva();
     d.close(); toast("Cavallo salvato"); render();
@@ -317,7 +324,7 @@ function apriScheda(id) {
       <div><b>${rating[id] === null ? "Da valutare" : fmtN(rating[id])}</b>rating attuale</div>
       <div><b>${fmtN(ratingBase(c))}</b>rating iniziale</div>
       <div><b>${esc(c.razza) || "—"}</b>razza</div>
-      <div><b>${c.annoNascita ? etaAl(c) + " anni" : "—"}</b>${c.annoNascita ? "nato nel " + esc(c.annoNascita) : "età"}</div>
+      <div><b>${etaAl(c) !== "" ? etaAl(c) + " anni" : "—"}</b>${c.annoNascita ? "nato nel " + esc(c.annoNascita) : "età"}</div>
       <div><b>${st.filter(x => x.tipo === "corsa").length}</b>corse</div>
       <div><b>${esc(proprietarioDi(c)) || "—"}</b>proprietario</div>
       <div><b>${esc(allenatoreDi(c)) || "—"}</b>allenatore</div>
@@ -392,7 +399,9 @@ function apriClasse(id) {
 
 // ================= Dialog: corsa =================
 let bozza = null;
-const nuovoPartente = () => ({ cavalloId: "", posizione: "", distacco: "", steccato: "", finimenti: "", pesoFantino: "", fantino: "", allenatore: "", proprietario: "", ratingManuale: "" });
+const nuovoPartente = () => ({ cavalloId: "", posizione: "", distacco: "", steccato: "", finimenti: "", pesoFantino: "", fantino: "", allenatore: "", proprietario: "", ratingManuale: "", parte: false, verificato: false });
+const haArrivo = p => !!String(p.posizione ?? "").trim();
+const daVerificare = p => haArrivo(p) && !p.verificato;
 function apriCorsa(id) {
   bozza = id ? structuredClone(S.corse[id]) : { id: uid(), creata: Date.now(), nuova: true, data: oggi(), nome: "", ippodromo: "", classeId: Object.keys(S.classi)[0] || "", distanza: "", partecipanti: [nuovoPartente(), nuovoPartente(), nuovoPartente()] };
   const d = document.getElementById("dlgCorsa");
@@ -406,9 +415,10 @@ function apriCorsa(id) {
       <label>Distanza (m)<input type="number" data-f="distanza" value="${esc(bozza.distanza)}"></label>
     </div>
     <h3>Iscritti, partenti e ordine d'arrivo <span class="meta" id="nIscritti"></span></h3>
-    <p class="hint">Scrivi l'arrivo solo per i partenti (<b>NA</b> per chi è partito e non è arrivato). «Ordina per arrivo» toglie gli iscritti senza arrivo. Distacco in lunghezze dal cavallo che precede (multipli di 0,25).</p>
-    <div class="toolbar" style="margin-bottom:8px"><input type="search" id="filtroIscritti" placeholder="Cerca un cavallo tra gli iscritti…" style="max-width:320px;margin:0" aria-label="Cerca tra gli iscritti"></div>
-    <div class="scroll"><table class="runners"><thead><tr><th>Cavallo</th><th>Arrivo</th><th>Distacco</th><th>Steccato</th><th>Finimenti</th><th>Peso fantino</th><th>Fantino</th><th>Allenatore</th><th>Proprietario</th><th></th></tr></thead><tbody id="righe"></tbody></table></div>
+    <p class="hint">1) Spunta <b>Parte</b> per i partenti (usa la ricerca) e premi «Togli i non partenti». 2) Scrivi l'arrivo (<b>NA</b> per chi è partito e non è arrivato) e il distacco in lunghezze dal cavallo che precede (multipli di 0,25).</p>
+    <div class="toolbar" style="margin-bottom:8px;align-items:center"><input type="search" id="filtroIscritti" placeholder="Cerca un cavallo tra gli iscritti…" style="max-width:320px;margin:0" aria-label="Cerca tra gli iscritti">
+      <button type="button" class="btn" data-act="togli-non-partenti" id="btnTogli">Togli i non partenti</button></div>
+    <div class="scroll"><table class="runners"><thead><tr><th>Parte</th><th>Cavallo</th><th>Arrivo</th><th>Distacco</th><th>Steccato</th><th>Finimenti</th><th>Peso fantino</th><th>Fantino</th><th>Allenatore</th><th>Proprietario</th><th></th></tr></thead><tbody id="righe"></tbody></table></div>
     <div class="toolbar" style="margin-top:10px"><button type="button" class="btn" data-act="aggiungi-partente">Aggiungi partente</button><button type="button" class="btn" data-act="ordina-arrivo">Ordina per arrivo</button></div>
     <h3>Effetto sul rating</h3>
     <div id="anteprima"></div>
@@ -421,8 +431,14 @@ function apriCorsa(id) {
     if (t.id === "filtroIscritti") return;
     if (t.dataset.f) bozza[t.dataset.f] = t.value;
     if (t.dataset.p) {
-      const i = Number(t.closest("tr").dataset.i); bozza.partecipanti[i][t.dataset.p] = t.value;
-      if (t.dataset.p === "cavalloId" && t.value) { precompila(bozza.partecipanti[i]); renderRighe(); }
+      const i = Number(t.closest("tr").dataset.i), p = bozza.partecipanti[i], k = t.dataset.p;
+      p[k] = t.type === "checkbox" ? t.checked : t.value;
+      if (k === "cavalloId" && t.value) { p.parte = true; precompila(p); renderRighe(); }
+      if (k === "parte") { t.closest("tr").classList.toggle("parte", t.checked); aggiornaConteggi(); }
+      if (k === "posizione" && haArrivo(p) && !p.parte) { p.parte = true; const cb = t.closest("tr").querySelector('[data-p="parte"]'); if (cb) cb.checked = true; t.closest("tr").classList.add("parte"); aggiornaConteggi(); }
+      // Cambiando arrivi o distacchi cambiano i rating di tutti: vanno riverificati
+      if (k === "posizione" || k === "distacco") bozza.partecipanti.forEach(x => { x.verificato = false; });
+      if (k === "ratingManuale") p.verificato = true;
     }
   });
   f.addEventListener("change", e => { if (e.target.id !== "filtroIscritti") renderAnteprima(); });
@@ -439,13 +455,21 @@ function precompila(r) {
   if (!r.finimenti) r.finimenti = u.finimenti || "";
 }
 const chiaveArrivo = p => { const n = Number(p.posizione); return n > 0 ? n : String(p.posizione ?? "").trim() ? 900 : 999; };
+function aggiornaConteggi() {
+  const tutti = bozza.partecipanti.filter(p => p.cavalloId || p.nomeNuovo);
+  const partenti = tutti.filter(p => p.parte).length, fuori = tutti.length - partenti;
+  document.getElementById("nIscritti").textContent = tutti.length ? `(${tutti.length} in elenco · ${partenti} partenti)` : "";
+  const b = document.getElementById("btnTogli");
+  if (b) { b.textContent = fuori && partenti ? `Togli i non partenti (${fuori})` : "Togli i non partenti"; b.disabled = !partenti || !fuori; }
+}
 function filtraRighe() {
   const q = norm(document.getElementById("filtroIscritti")?.value);
   document.querySelectorAll("#righe tr").forEach(tr => { tr.style.display = !q || tr.dataset.nome.includes(q) ? "" : "none"; });
 }
 function renderRighe() {
   const opts = cavalliOrdinati();
-  document.getElementById("righe").innerHTML = bozza.partecipanti.map((p, i) => `<tr data-i="${i}" data-nome="${esc(norm(nomeP(p)))}">
+  document.getElementById("righe").innerHTML = bozza.partecipanti.map((p, i) => `<tr data-i="${i}" data-nome="${esc(norm(nomeP(p)))}" class="${p.parte ? "parte" : ""}">
+    <td class="num"><input type="checkbox" data-p="parte" ${p.parte ? "checked" : ""} aria-label="Parte" style="width:20px;height:20px;margin:0"></td>
     <td>${p.cavalloId || p.nomeNuovo ? `<b>${esc(nomeP(p))}</b>${p.nomeNuovo ? ` <span class="tag">nuovo</span>` : ""}` : `<select data-p="cavalloId" class="wide" aria-label="Cavallo"><option value="">Scegli…</option>${opts.map(c => `<option value="${c.id}">${esc(c.nome)}</option>`).join("")}</select>`}</td>
     <td><input type="text" inputmode="numeric" maxlength="3" class="pos" data-p="posizione" value="${esc(p.posizione)}" aria-label="Posizione d'arrivo" placeholder="—"></td>
     <td><input type="number" min="0" step="0.25" data-p="distacco" value="${esc(p.distacco)}" aria-label="Distacco"></td>
@@ -456,8 +480,7 @@ function renderRighe() {
     <td><input data-p="allenatore" list="dl-allenatori" class="wide" value="${esc(p.allenatore)}" aria-label="Allenatore"></td>
     <td><input data-p="proprietario" list="dl-proprietari" class="wide" value="${esc(p.proprietario)}" aria-label="Proprietario"></td>
     <td><button type="button" class="btn small danger" data-act="rimuovi-partente" aria-label="Rimuovi partente">✕</button></td></tr>`).join("");
-  const n = bozza.partecipanti.filter(p => p.cavalloId || p.nomeNuovo).length;
-  document.getElementById("nIscritti").textContent = n ? `(${n})` : "";
+  aggiornaConteggi();
   filtraRighe();
 }
 function risultatiBozza() {
@@ -469,29 +492,38 @@ function renderAnteprima() {
   const res = risultatiBozza();
   const el = document.getElementById("anteprima");
   if (!res.length) { el.innerHTML = `<p class="meta">Scegli i cavalli per vedere pesi e variazioni.</p>`; return; }
-  el.innerHTML = `<p class="hint" style="margin:0 0 8px">Il rating dopo è proposto dal calcolo. Scrivi un valore per deciderlo tu; svuota il campo per tornare al calcolo.</p>
-  <div class="scroll"><table><thead><tr><th>Arrivo</th><th>Cavallo</th><th class="num">Rating prima</th><th class="num">Peso assegnato</th><th class="num">Kg dal 1°</th><th class="num">Calcolato</th><th class="num">Rating dopo</th><th class="num">Variazione</th></tr></thead><tbody>
-  ${res.map(r => `<tr data-i="${bozza.partecipanti.indexOf(r.p)}" class="${fuoriSoglia(r.delta) ? "alert" : ""}"><td>${Number(r.p.posizione) > 0 ? `<span class="cloth pos">${esc(r.p.posizione)}</span>` : String(r.p.posizione ?? "").trim() ? `<span class="cloth none">NA</span>` : `<span class="cloth none">—</span>`}</td><td>${esc(nomeP(r.p))}${r.p.nomeNuovo ? ` <span class="tag">nuovo</span>` : ""}${r.fuoriClasse ? `<span class="warn">Rating fuori dai limiti della classe</span>` : ""}${fuoriSoglia(r.delta) ? `<span class="warn">Variazione oltre ±${fmtN(R().sogliaAvviso)} kg</span>` : ""}</td>
-  <td class="num">${fmtRating(r.pre)}</td><td class="num">${fmtN(r.pesoAssegnato)}${r.discarico ? `<br><span class="meta">disc. ${fmtN(r.discarico)} (${r.eta} anni)</span>` : ""}</td><td class="num">${r.kgCum !== undefined ? fmtN(r.kgCum) : "—"}</td>
+  const nv = res.filter(r => daVerificare(r.p)).length;
+  el.innerHTML = `<p class="hint" style="margin:0 0 8px">Il rating dopo è proposto dal calcolo. Scrivi un valore per deciderlo tu; svuota il campo per tornare al calcolo. Ogni partente va controllato e spuntato in <b>Verificato</b>: le righe non verificate restano evidenziate.</p>
+  ${nv ? `<div class="notice verifica-box"><b>${nv} ${nv === 1 ? "rating da verificare" : "rating da verificare"}</b> <button type="button" class="btn small" data-act="verifica-tutti" style="margin-left:10px">Segna tutti come verificati</button></div>` : ""}
+  <div class="scroll"><table><thead><tr><th>Arrivo</th><th>Cavallo</th><th class="num">Rating prima</th><th class="num">Peso assegnato</th><th class="num">Kg dal 1°</th><th class="num">Calcolato</th><th class="num">Rating dopo</th><th class="num">Variazione</th><th>Verificato</th></tr></thead><tbody>
+  ${res.map(r => `<tr data-i="${bozza.partecipanti.indexOf(r.p)}" class="${daVerificare(r.p) ? "verifica" : ""} ${fuoriSoglia(r.delta) ? "alert" : ""}"><td>${Number(r.p.posizione) > 0 ? `<span class="cloth pos">${esc(r.p.posizione)}</span>` : String(r.p.posizione ?? "").trim() ? `<span class="cloth none">NA</span>` : `<span class="cloth none">—</span>`}</td><td>${esc(nomeP(r.p))}${r.p.nomeNuovo ? ` <span class="tag">nuovo</span>` : ""}${r.fuoriClasse ? `<span class="warn">Rating fuori dai limiti della classe</span>` : ""}${fuoriSoglia(r.delta) ? `<span class="warn">Variazione oltre ±${fmtN(R().sogliaAvviso)} kg</span>` : ""}</td>
+  <td class="num">${fmtRating(r.pre)}</td><td class="num">${fmtN(r.pesoAssegnato)}${r.discarico ? `<br><span class="meta">disc. ${fmtN(r.discarico)} (${etaTesto(r.eta)} anni)</span>` : ""}</td><td class="num">${r.kgCum !== undefined ? fmtN(r.kgCum) : "—"}</td>
   <td class="num">${fmtN(r.calcolato)} <span class="meta">(${segno(r.deltaCalcolato)})</span></td>
   <td class="num"><input type="number" step="0.25" class="manuale${r.manuale ? " attivo" : ""}" data-p="ratingManuale" value="${esc(r.manuale ? r.p.ratingManuale : "")}" placeholder="${fmtN(r.calcolato)}" aria-label="Rating dopo deciso a mano">${r.manuale ? `<span class="tag">a mano</span>` : ""}</td>
-  <td class="num ${cls(r.delta)}">${segno(r.delta)}</td></tr>`).join("")}</tbody></table></div>`;
+  <td class="num ${cls(r.delta)}">${segno(r.delta)}</td>
+  <td>${haArrivo(r.p) ? `<label style="display:flex;gap:6px;align-items:center;color:var(--ink);margin:0"><input type="checkbox" data-p="verificato" ${r.p.verificato ? "checked" : ""} style="width:20px;height:20px;margin:0">${r.p.verificato ? "Sì" : "<b>Da verificare</b>"}</label>` : ""}</td></tr>`).join("")}</tbody></table></div>`;
 }
 function salvaCorsa(e) {
   e.preventDefault();
   const parts = bozza.partecipanti.filter(p => p.cavalloId || p.nomeNuovo);
   if (!bozza.data || !bozza.classeId) return toast("Indica data e classe");
   if (!parts.length) return toast("Aggiungi almeno un cavallo");
-  const ids = parts.map(p => p.cavalloId || "n:" + norm(p.nomeNuovo));
+  const ids = parts.map(p => p.cavalloId || "n:" + chiave(p.nomeNuovo));
   if (new Set(ids).size !== ids.length) return toast("Un cavallo compare due volte");
   const nuovi = parts.filter(p => p.nomeNuovo && !p.cavalloId);
   if (nuovi.length > 30 && !confirm(`Ci sono ancora ${nuovi.length} iscritti nuovi nella corsa: salvando verranno tutti creati in archivio. Di solito prima si preme «Ordina per arrivo» per lasciare solo i partenti. Salvare comunque?`)) return;
   const stecc = parts.map(p => p.steccato).filter(Boolean);
   if (new Set(stecc).size !== stecc.length) return toast("Due cavalli hanno lo stesso steccato");
+  const nonVerif = parts.filter(daVerificare);
+  if (nonVerif.length) {
+    renderAnteprima();
+    document.getElementById("anteprima").scrollIntoView({ behavior: "smooth", block: "start" });
+    if (!confirm(`${nonVerif.length} ${nonVerif.length === 1 ? "partente ha" : "partenti hanno"} il rating non ancora verificato (righe evidenziate):\n\n${nonVerif.map(nomeP).join(", ")}\n\nSalvare comunque? La corsa resterà segnata «da verificare».`)) return;
+  }
   const avvisi = risultatiBozza().filter(r => fuoriSoglia(r.delta));
   if (avvisi.length && !confirm(`Attenzione, variazione di rating oltre ±${fmtN(R().sogliaAvviso)} kg:\n\n${avvisi.map(r => `${nomeP(r.p)}: ${fmtN(r.pre)} → ${fmtN(r.post)} (${segno(r.delta)})`).join("\n")}\n\nSalvare comunque?`)) return;
   for (const p of nuovi) {
-    let c = Object.values(S.cavalli).find(y => norm(y.nome) === norm(p.nomeNuovo));
+    let c = Object.values(S.cavalli).find(y => chiave(y.nome) === chiave(p.nomeNuovo));
     if (!c) {
       c = { id: uid(), nome: p.nomeNuovo, annoNascita: "", razza: "", ratingIniziale: "", proprietario: "", allenatore: "", note: `Creato dagli iscritti del ${fmtData(bozza.data)}` };
       S.cavalli[c.id] = c;
@@ -518,6 +550,37 @@ function salvaCorsa(e) {
 const norm = s => String(s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 const titolo = s => String(s || "").toLowerCase().replace(/(^|[\s'’\-])(\p{L})/gu, (m, a, b) => a + b.toUpperCase());
 const nomeP = p => S.cavalli[p.cavalloId]?.nome || p.nomeNuovo || "—";
+// Identità del cavallo: le sigle MS e AA non contano (stesso cavallo); la nazionalità sì (IRE, GB, FR… = cavallo diverso)
+const SIGLE_IGNORATE = new Set(["MS", "AA"]);
+function scomponiNome(nome) {
+  let s = String(nome || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().replace(/[’`]/g, "'").replace(/\s+/g, " ").trim();
+  let naz = "";
+  for (let k = 0; k < 4; k++) {
+    const m = s.match(/^(.*\S)\s*\(\s*([A-Z]{2,3})\s*\)$/)      // FULMINE (IRE)
+      || s.match(/^(.*\S)\s+-\s*([A-Z]{2,3})\s*-?$/)               // FULMINE - IRE, ANGELO ROSSO -MS-
+      || s.match(/^(.*\S)-([A-Z]{2,3})-$/)                            // NOME-MS-
+      || s.match(/^(.*\S)-(MS|AA)$/)                                  // LAVIE DA CLODIA-MS
+      || s.match(/^(.*\S)\s+(MS|AA)$/);                              // FULMINE MS
+    if (!m) break;
+    s = m[1].trim();
+    if (!SIGLE_IGNORATE.has(m[2]) && !naz) naz = m[2];
+  }
+  return { base: s, naz };
+}
+const chiave = nome => { const { base, naz } = scomponiNome(nome); return norm(base) + (naz ? "|" + naz : ""); };
+const nomePulito = nome => { const { base, naz } = scomponiNome(nome); return titolo(base) + (naz ? ` (${naz})` : ""); };
+// Vero se le due stringhe differiscono al massimo di una lettera (errore di battitura)
+function quasiUguali(a, b) {
+  if (a === b) return true;
+  if (Math.abs(a.length - b.length) > 1) return false;
+  let i = 0, j = 0, diff = 0;
+  while (i < a.length && j < b.length) {
+    if (a[i] === b[j]) { i++; j++; continue; }
+    if (++diff > 1) return false;
+    if (a.length > b.length) i++; else if (b.length > a.length) j++; else { i++; j++; }
+  }
+  return diff + (a.length - i) + (b.length - j) <= 1;
+}
 function analizzaIscritti(testo) {
   // Se il testo incollato ha perso gli a capo, li rimetto prima di ogni intestazione di corsa
   const t = String(testo || "").replace(/\r/g, "").replace(/\s+(?=\d{3,6}\)\s*Premio\b)/gi, "\n").replace(/\s+(?=(Pubblicazione dei Pesi|Dichiarazione (Forfait|Partenti))\b)/gi, "\n");
@@ -556,8 +619,8 @@ function analizzaIscritti(testo) {
     if (tot) corpo = corpo.slice(0, tot.index);
     corpo = corpo.replace(/\(\s*\d+\s*,\s*\d+\s*\)/g, "");          // (6,0) delle corse a vendere
     const visti = new Set();
-    c.nomi = corpo.split(",").map(n => n.replace(/\s*-\s*MS\s*-?\s*$/i, "").replace(/\s+/g, " ").trim())  // marcatura -MS-
-      .filter(n => /[A-Za-zÀ-ÿ]/.test(n)).filter(n => { const k = norm(n); if (visti.has(k)) return false; visti.add(k); return true; });
+    c.nomi = corpo.split(",").map(n => n.replace(/\s+/g, " ").trim())
+      .filter(n => /[A-Za-zÀ-ÿ]/.test(n)).filter(n => { const k = chiave(n); if (visti.has(k)) return false; visti.add(k); return true; });
     delete c.corpo;
   }
   return out;
@@ -596,10 +659,14 @@ function impLeggi() {
 }
 function impRender() {
   const a = importo.analisi, c = a.corse[importo.sel];
-  const indice = new Map(Object.values(S.cavalli).map(x => [norm(x.nome), x]));
-  const trovati = [], nuovi = [];
-  c.nomi.forEach(n => { const x = indice.get(norm(n)); x ? trovati.push(x) : nuovi.push(n); });
-  importo.trovati = trovati; importo.nuovi = nuovi;
+  const indice = new Map(Object.values(S.cavalli).map(x => [chiave(x.nome), x]));
+  const trovati = [], nuovi = [], simili = [];
+  c.nomi.forEach(n => { const x = indice.get(chiave(n)); x ? trovati.push(x) : nuovi.push(n); });
+  // Nomi nuovi che differiscono di una sola lettera da un cavallo in archivio (stessa nazionalità): possibile errore di battitura
+  const arch = Object.values(S.cavalli).map(x => ({ x, ...scomponiNome(x.nome) })).map(o => ({ ...o, b: norm(o.base) })).filter(o => o.b.length >= 4);
+  nuovi.forEach(n => { const { base, naz } = scomponiNome(n), b = norm(base); if (b.length < 4) return;
+    const hit = arch.find(o => o.naz === naz && quasiUguali(o.b, b)); if (hit) simili.push({ nome: n, c: hit.x }); });
+  importo.trovati = trovati; importo.nuovi = nuovi; importo.simili = simili;
   const { rating } = calcola(Object.values(S.corse).filter(k => k.id !== bozza.id && k.data < (a.data || bozza.data)));
   const cl = c.classe ? Object.values(S.classi).find(x => norm(x.nome) === norm(c.classe)) : null;
   const totOk = c.totale === null || c.totale === c.nomi.length;
@@ -613,7 +680,9 @@ function impRender() {
       ${c.classe && !cl ? `<br><span class="warn">La ${esc(c.classe)} non esiste nelle Impostazioni: la classe della corsa resta da scegliere.</span>` : ""}
     </div>
     ${trovati.length ? `<details style="margin-top:10px"><summary>Cavalli in archivio (${trovati.length})</summary><p class="meta">${trovati.map(x => `${esc(x.nome)} (${rating[x.id] === null || rating[x.id] === undefined ? "da valutare" : fmtN(rating[x.id])})`).join(", ")}</p></details>` : ""}
-    ${nuovi.length ? `<details style="margin-top:6px"><summary>Nuovi (${nuovi.length})</summary><p class="meta">${nuovi.map(n => esc(titolo(n))).join(", ")}</p></details>` : ""}
+    ${simili.length ? `<h3>Forse già in archivio (${simili.length})</h3><p class="hint">Nomi che differiscono di una lettera da un cavallo in archivio. Spunta quelli che sono lo stesso cavallo.</p>
+      <div class="scroll"><table><tbody>${simili.map((x, i) => `<tr><td style="width:40px"><input type="checkbox" data-simile="${i}" style="width:20px;height:20px;margin:0" aria-label="Associa"></td><td>${esc(nomePulito(x.nome))}</td><td>→ è <b>${esc(x.c.nome)}</b></td></tr>`).join("")}</tbody></table></div>` : ""}
+    ${nuovi.length ? `<details style="margin-top:6px"><summary>Nuovi (${nuovi.length})</summary><p class="meta">${nuovi.map(n => esc(nomePulito(n))).join(", ")}</p></details>` : ""}
     <label style="margin-top:14px;display:flex;gap:8px;align-items:center;color:var(--ink)"><input type="checkbox" id="impCompila" checked style="width:auto;margin:0">Compila data, ippodromo, nome${cl ? ", classe" : ""} e distanza della corsa</label>
     <div class="dlg-foot"><button type="button" class="btn primary" data-act="imp-conferma">Aggiungi ${c.nomi.length} iscritti alla corsa</button></div>`;
   const sel = document.getElementById("impCorsa");
@@ -631,19 +700,89 @@ function impConferma() {
     }
   }
   bozza.partecipanti = bozza.partecipanti.filter(p => p.cavalloId || p.nomeNuovo);
-  const gia = new Set(bozza.partecipanti.map(p => p.cavalloId || "n:" + norm(p.nomeNuovo)));
+  const gia = new Set(bozza.partecipanti.map(p => p.cavalloId || "n:" + chiave(p.nomeNuovo)));
+  const associati = new Map();
+  importo.simili.forEach((x, i) => { if (document.querySelector(`[data-simile="${i}"]`)?.checked) associati.set(x.nome, x.c); });
   let n = 0;
-  for (const x of importo.trovati) {
+  for (const x of [...importo.trovati, ...associati.values()]) {
     if (gia.has(x.id)) continue; gia.add(x.id);
     const r = { ...nuovoPartente(), cavalloId: x.id }; precompila(r); bozza.partecipanti.push(r); n++;
   }
   for (const nome of importo.nuovi) {
-    const k = "n:" + norm(nome); if (gia.has(k)) continue; gia.add(k);
-    bozza.partecipanti.push({ ...nuovoPartente(), nomeNuovo: titolo(nome) }); n++;
+    if (associati.has(nome)) continue;
+    const k = "n:" + chiave(nome); if (gia.has(k)) continue; gia.add(k);
+    bozza.partecipanti.push({ ...nuovoPartente(), nomeNuovo: nomePulito(nome) }); n++;
   }
   document.getElementById("dlgImport").close();
   renderRighe(); renderAnteprima();
-  toast(`${n} iscritti aggiunti. Scrivi l'arrivo dei partenti e premi «Ordina per arrivo»`);
+  toast(`${n} iscritti aggiunti. Spunta i partenti e premi «Togli i non partenti»`);
+}
+
+// ================= Importazione cavalli da Excel (classifica) =================
+// Colonne: nome, anno, rating. Anno vuoto = 5 anni o più. Rating vuoto = da valutare.
+let impCav = null;
+const numero = v => { const t = String(v ?? "").trim().replace(",", "."); return t === "" ? null : Number(t); };
+async function importaCavalli() {
+  const r = await window.api.leggiTabella();
+  if (r.annullato) return;
+  if (r.errore) return toast(r.errore);
+  const righe = r.righe.filter(x => x.some(v => String(v ?? "").trim()));
+  if (!righe.length) return toast("Il file è vuoto");
+  // Intestazione: cerco le colonne per nome, altrimenti uso le prime tre
+  const h = righe[0].map(v => norm(v));
+  const col = (...parole) => h.findIndex(x => parole.some(p => x.includes(p)));
+  let iN = col("nome", "cavallo"), iA = col("anno", "nascita", "eta"), iR = col("rating", "valut", "kg");
+  const conIntestazione = iN >= 0;
+  if (!conIntestazione) { iN = 0; iA = 1; iR = 2; }
+  const annoOggi = new Date().getFullYear();
+  const indice = new Map(Object.values(S.cavalli).map(x => [chiave(x.nome), x]));
+  const conCorse = new Set(Object.values(S.corse).flatMap(k => (k.partecipanti || []).map(p => p.cavalloId)));
+  const visti = new Set();
+  const esito = { nuovi: [], aggiornati: [], saltati: [], errori: [] };
+  for (const [n, riga] of righe.slice(conIntestazione ? 1 : 0).entries()) {
+    const nr = n + (conIntestazione ? 2 : 1);
+    const nomeRaw = String(riga[iN] ?? "").trim();
+    if (!nomeRaw) { esito.errori.push(`Riga ${nr}: nome mancante`); continue; }
+    const k = chiave(nomeRaw);
+    if (visti.has(k)) { esito.saltati.push(`${nomePulito(nomeRaw)}: compare più volte nel file`); continue; }
+    visti.add(k);
+    const a = iA >= 0 ? numero(riga[iA]) : null, rt = iR >= 0 ? numero(riga[iR]) : null;
+    if ((a !== null && !Number.isFinite(a)) || (rt !== null && !Number.isFinite(rt))) { esito.errori.push(`Riga ${nr} (${nomeRaw}): anno o rating non valido`); continue; }
+    // Anno: vuoto = 5 anni o più; un numero piccolo è un'età, non un anno
+    const dati = { annoNascita: a === null ? "" : a < 100 ? annoOggi - a : a, adulto: a === null, ratingIniziale: rt === null ? "" : rt };
+    const c = indice.get(k);
+    if (!c) esito.nuovi.push({ nome: nomePulito(nomeRaw), ...dati });
+    else if (conCorse.has(c.id)) esito.saltati.push(`${c.nome}: ha già corse in archivio, rating non modificato`);
+    else esito.aggiornati.push({ c, ...dati });
+  }
+  impCav = { file: r.nome, esito };
+  const d = document.getElementById("dlgImport");
+  const tot = esito.nuovi.length + esito.aggiornati.length;
+  const elenco = (t, a) => a.length ? `<details style="margin-top:6px"><summary>${t} (${a.length})</summary><p class="meta">${a.map(esc).join("<br>")}</p></details>` : "";
+  d.innerHTML = `<div class="dlg-head"><h2>Importa cavalli da ${esc(r.nome)}</h2><button class="btn small" data-close>Chiudi</button></div>
+  <div class="dlg-body">
+    <p class="hint">Colonne usate: <b>${conIntestazione ? esc(righe[0][iN]) : "1ª"}</b> (nome)${iA >= 0 ? `, <b>${conIntestazione ? esc(righe[0][iA]) : "2ª"}</b> (anno)` : ""}${iR >= 0 ? `, <b>${conIntestazione ? esc(righe[0][iR]) : "3ª"}</b> (rating)` : ""}. Anno vuoto = 5 anni o più; rating vuoto = da valutare.</p>
+    <div class="panel"><b>${esito.nuovi.length}</b> cavalli nuovi · <b>${esito.aggiornati.length}</b> già in archivio da aggiornare · <b>${esito.saltati.length}</b> saltati · <b>${esito.errori.length}</b> righe con errori</div>
+    ${esito.nuovi.length ? `<div class="scroll" style="max-height:320px;margin-top:10px"><table><thead><tr><th>Nome</th><th class="num">Anno</th><th class="num">Rating</th></tr></thead><tbody>
+      ${esito.nuovi.slice(0, 300).map(x => `<tr><td>${esc(x.nome)}</td><td class="num">${x.adulto ? "5 anni o più" : esc(x.annoNascita)}</td><td class="num">${x.ratingIniziale === "" ? "da valutare" : fmtN(x.ratingIniziale)}</td></tr>`).join("")}
+      ${esito.nuovi.length > 300 ? `<tr><td colspan="3" class="meta">… e altri ${esito.nuovi.length - 300}</td></tr>` : ""}</tbody></table></div>` : ""}
+    ${elenco("Da aggiornare", esito.aggiornati.map(x => `${x.c.nome}: ${x.adulto ? "5 anni o più" : x.annoNascita}, rating ${x.ratingIniziale === "" ? "da valutare" : fmtN(x.ratingIniziale)}`))}
+    ${elenco("Saltati", esito.saltati)}${elenco("Righe con errori", esito.errori)}
+    <div class="dlg-foot"><button type="button" class="btn primary" data-act="imp-cav-conferma" ${tot ? "" : "disabled"}>Importa ${tot} cavalli</button></div>
+  </div>`;
+  d.showModal();
+}
+function confermaImportCavalli() {
+  const { esito, file } = impCav;
+  for (const x of esito.nuovi) {
+    const c = { id: uid(), nome: x.nome, annoNascita: x.annoNascita, adulto: x.adulto, razza: "", ratingIniziale: x.ratingIniziale, proprietario: "", allenatore: "", note: `Importato da ${file}` };
+    S.cavalli[c.id] = c;
+  }
+  for (const x of esito.aggiornati) Object.assign(x.c, { annoNascita: x.annoNascita, adulto: x.adulto, ratingIniziale: x.ratingIniziale });
+  salva();
+  document.getElementById("dlgImport").close();
+  toast(`${esito.nuovi.length} cavalli importati${esito.aggiornati.length ? `, ${esito.aggiornati.length} aggiornati` : ""}`);
+  render();
 }
 
 // ================= Export Excel =================
@@ -682,7 +821,7 @@ function excelCorsa() {
         { titolo: "Rating prima", larghezza: 10, num: 1 }, { titolo: "Rating calcolato", larghezza: 10, num: 1 }, { titolo: "Rating dopo", larghezza: 10, num: 1 }, { titolo: "Deciso a mano", larghezza: 9 }, { titolo: "Variazione", larghezza: 10, num: 1 }],
       righe: res.map(r => { const p = r.p, arr = Number(p.posizione) > 0;
         const t = v => v === null || v === undefined ? "" : tondo(v);
-        return [arr ? Number(p.posizione) : "N.A.", nomeP(p), r.eta ?? "", arr && Number(p.posizione) > 1 ? Number(p.distacco) || 0 : "", r.kgCum !== undefined ? tondo(r.kgCum) : "",
+        return [arr ? Number(p.posizione) : "N.A.", nomeP(p), etaTesto(r.eta), arr && Number(p.posizione) > 1 ? Number(p.distacco) || 0 : "", r.kgCum !== undefined ? tondo(r.kgCum) : "",
           p.steccato ? Number(p.steccato) : "", p.finimenti, r.discarico || "", t(r.pesoAssegnato), p.pesoFantino ? Number(p.pesoFantino) : "", p.fantino, p.allenatore, p.proprietario, r.pre === null ? "da valutare" : t(r.pre), t(r.calcolato), t(r.post), r.manuale ? "Sì" : "", t(r.delta)]; }),
     }],
   });
@@ -717,6 +856,17 @@ document.addEventListener("click", async e => {
         renderRighe(); return renderAnteprima();
       }
       case "importa-iscritti": return apriImport();
+      case "togli-non-partenti": {
+        const fuori = bozza.partecipanti.filter(p => !p.parte);
+        if (!fuori.length) return;
+        if (!confirm(`Togliere dalla corsa ${fuori.length} ${fuori.length === 1 ? "iscritto non partente" : "iscritti non partenti"}?`)) return;
+        bozza.partecipanti = bozza.partecipanti.filter(p => p.parte);
+        const fq = document.getElementById("filtroIscritti"); if (fq) fq.value = "";
+        renderRighe(); return renderAnteprima();
+      }
+      case "verifica-tutti": bozza.partecipanti.forEach(p => { if (haArrivo(p)) p.verificato = true; }); return renderAnteprima();
+      case "importa-cavalli": return importaCavalli();
+      case "imp-cav-conferma": return confermaImportCavalli();
       case "imp-leggi": return impLeggi();
       case "imp-pdf": return impDaPdf();
       case "imp-conferma": return impConferma();

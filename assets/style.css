@@ -98,3 +98,8 @@ tr.alert td{background:var(--warn-bg)}
 input.pos{width:56px;min-width:56px;text-align:center}
 .notice a{color:inherit;font-weight:600}
 .runners td:first-child{min-width:180px}
+tr.verifica td{background:color-mix(in srgb,var(--silk) 22%,transparent)}
+tr.verifica td:first-child{box-shadow:inset 4px 0 0 var(--silk)}
+tr.parte td{background:color-mix(in srgb,var(--turf) 9%,transparent)}
+.tag.avviso{background:var(--silk)}
+.verifica-box{display:flex;align-items:center;flex-wrap:wrap;gap:6px}
