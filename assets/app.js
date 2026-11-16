@@ -32,6 +32,7 @@ function normalizza(d) {
     if (p.verificato === undefined) p.verificato = true;
     if (p.parte === undefined) p.parte = true;
   }));
+  Object.values(out.corse || {}).forEach(k => { if (k.fasePartenti === undefined) k.fasePartenti = true; });
   // Dalla 1.2 dei cavalli si registra solo l'anno di nascita
   Object.values(out.cavalli || {}).forEach(c => {
     if (c.nascita && !c.annoNascita) c.annoNascita = Number(String(c.nascita).slice(0, 4));
@@ -108,6 +109,9 @@ function calcola(listaCorse = Object.values(S.corse), fino = null) {
     const discaricoDi = p => (etaD && etaDi(p) === etaD && conPiuAnziani && mese >= 1 && mese <= 12) ? Number(r.discarico?.[mese]) || 0 : 0;
     const cum = new Map(); let acc = 0;
     arrivati.forEach((p, i) => { if (i > 0) acc += (Number(p.distacco) || 0) / 0.25 * kgQ; cum.set(p, acc); });
+    // Cavallo base: i distacchi si misurano da lui (in meno per chi arriva dopo, in più per chi arriva prima)
+    const base = corsa.baseId ? arrivati.find(p => idP(p) === corsa.baseId) : null;
+    const cumBase = base ? cum.get(base) : 0;
     const out = [];
     for (const p of parts) {
       const pre = rating[p.cavalloId] ?? null;
@@ -115,7 +119,9 @@ function calcola(listaCorse = Object.values(S.corse), fino = null) {
       let delta = null;
       if (pre !== null) {
         delta = 0;
-        if (kg !== undefined && arrivati.length > 1) {
+        if (base && kg !== undefined) {
+          delta = arrotonda(Math.max(-tetto, Math.min(tetto, cumBase - kg)));
+        } else if (kg !== undefined && arrivati.length > 1) {
           if (p === arrivati[0]) delta = Math.max(Number(r.minimoVincitore) || 0, cum.get(arrivati[1]) * (Number(r.fattoreVincitore) || 0));
           else delta = -kg;
           delta = arrotonda(Math.max(-tetto, Math.min(tetto, delta)));
@@ -125,7 +131,7 @@ function calcola(listaCorse = Object.values(S.corse), fino = null) {
       const post = manuale ? Number(p.ratingManuale) : calcolato;
       const disc = discaricoDi(p);
       out.push({ tipo: "corsa", data: corsa.data, cavalloId: p.cavalloId, pre, post, delta: pre === null || post === null ? null : post - pre,
-        calcolato, deltaCalcolato: delta, manuale, kgCum: kg, eta: etaDi(p), discarico: disc, pesoAssegnato: pre === null ? null : pre - coeff - disc,
+        calcolato, deltaCalcolato: delta, manuale, kgCum: kg, kgRif: kg === undefined ? undefined : base ? cumBase - kg : kg, eta: etaDi(p), discarico: disc, pesoAssegnato: pre === null ? null : pre - coeff - disc,
         fuoriClasse: !!cl && pre !== null && (pre < Number(cl.min) || pre > Number(cl.max)), p, corsa });
     }
     out.forEach(x => { rating[x.cavalloId] = x.post; storia[x.cavalloId]?.push(x); });
@@ -207,8 +213,8 @@ function vCorse() {
   if (!nCl || !nCav) return head + `<div class="empty"><p>Per inserire una corsa servono almeno ${!nCl ? "una classe" : ""}${!nCl && !nCav ? " e " : ""}${!nCav ? "un cavallo" : ""}.</p>
     <button class="btn primary" data-act="${!nCl ? "vai-impostazioni" : "nuovo-cavallo"}">${!nCl ? "Crea una classe" : "Aggiungi un cavallo"}</button></div>`;
   if (!list.length) return head + `<div class="empty"><p>Nessuna corsa inserita.</p><button class="btn primary" data-act="nuova-corsa">Inserisci la prima corsa</button></div>`;
-  return head + `<div class="scroll"><table><thead><tr><th>Data</th><th>Corsa</th><th>Ippodromo</th><th>Classe</th><th class="num">Distanza</th><th class="num">Partenti</th><th>Vincitore</th><th>Rating</th></tr></thead><tbody>
-  ${list.map(k => { const v = (k.partecipanti || []).find(p => Number(p.posizione) === 1); return `<tr class="link" data-corsa="${k.id}"><td>${fmtData(k.data)}</td><td><b>${esc(k.nome || "Senza nome")}</b></td><td>${esc(k.ippodromo)}</td><td>${esc(S.classi[k.classeId]?.nome || "—")}</td><td class="num">${k.distanza ? esc(k.distanza) + " m" : ""}</td><td class="num">${(k.partecipanti || []).length}</td><td>${v ? esc(nomeCavallo(v.cavalloId)) : "—"}</td><td>${(() => { const n = (k.partecipanti || []).filter(daVerificare).length; return n ? `<span class="tag avviso">${n} da verificare</span>` : "verificati"; })()}</td></tr>`; }).join("")}
+  return head + `<div class="scroll"><table><thead><tr><th>Data</th><th>Corsa</th><th>Ippodromo</th><th>Classe</th><th class="num">Distanza</th><th>Terreno</th><th class="num">Partenti</th><th>Vincitore</th><th>Rating</th></tr></thead><tbody>
+  ${list.map(k => { const v = (k.partecipanti || []).find(p => Number(p.posizione) === 1); return `<tr class="link" data-corsa="${k.id}"><td>${fmtData(k.data)}</td><td><b>${esc(k.nome || "Senza nome")}</b></td><td>${esc(k.ippodromo)}</td><td>${esc(S.classi[k.classeId]?.nome || "—")}${k.handicap ? ` <span class="tag">H</span>` : ""}</td><td class="num">${k.distanza ? esc(k.distanza) + " m" : ""}</td><td>${esc(k.terreno)}</td><td class="num">${(k.partecipanti || []).length}</td><td>${v ? esc(nomeCavallo(v.cavalloId)) : "—"}</td><td>${(() => { const n = (k.partecipanti || []).filter(daVerificare).length; return n ? `<span class="tag avviso">${n} da verificare</span>` : "verificati"; })()}</td></tr>`; }).join("")}
   </tbody></table></div>`;
 }
 
@@ -399,13 +405,16 @@ function apriClasse(id) {
 
 // ================= Dialog: corsa =================
 let bozza = null;
-const nuovoPartente = () => ({ cavalloId: "", posizione: "", distacco: "", steccato: "", finimenti: "", pesoFantino: "", fantino: "", allenatore: "", proprietario: "", ratingManuale: "", parte: false, verificato: false });
+const TERRENI = ["Buono", "Morbido", "L. pesante", "Pesante", "M. pesante", "Sabbia"];
+const nuovoPartente = () => ({ cavalloId: "", posizione: "", distacco: "", numero: "", steccato: "", finimenti: "", note: "", pesoFantino: "", fantino: "", allenatore: "", proprietario: "", ratingManuale: "", parte: false, verificato: false });
 const haArrivo = p => !!String(p.posizione ?? "").trim();
 const daVerificare = p => haArrivo(p) && !p.verificato;
+const idP = p => p.cavalloId || "n:" + chiave(p.nomeNuovo);
+const fasePartenti = () => !!bozza.fasePartenti;
 function apriCorsa(id) {
-  bozza = id ? structuredClone(S.corse[id]) : { id: uid(), creata: Date.now(), nuova: true, data: oggi(), nome: "", ippodromo: "", classeId: Object.keys(S.classi)[0] || "", distanza: "", partecipanti: [nuovoPartente(), nuovoPartente(), nuovoPartente()] };
+  bozza = id ? structuredClone(S.corse[id]) : { id: uid(), creata: Date.now(), nuova: true, data: oggi(), nome: "", ippodromo: "", classeId: Object.keys(S.classi)[0] || "", distanza: "", terreno: "", handicap: false, baseId: "", fasePartenti: false, partecipanti: [] };
   const d = document.getElementById("dlgCorsa");
-  d.innerHTML = `<div class="dlg-head"><h2>${id ? "Modifica corsa" : "Nuova corsa"}</h2><div class="toolbar"><button type="button" class="btn small" data-act="importa-iscritti">Importa iscritti</button><button type="button" class="btn small" data-act="excel-corsa">Esporta in Excel</button><button class="btn small" data-close>Chiudi</button></div></div>
+  d.innerHTML = `<div class="dlg-head"><h2>${id ? "Modifica corsa" : "Nuova corsa"}</h2><div class="toolbar"><button type="button" class="btn small" data-act="importa-iscritti">Importa iscritti</button><button type="button" class="btn small" data-act="excel-corsa" id="btnExcelCorsa">Esporta in Excel</button><button class="btn small" data-close>Chiudi</button></div></div>
   <form class="dlg-body">
     <div class="grid">
       <label>Data<input type="date" data-f="data" required value="${esc(bozza.data)}" max="9999-12-31"></label>
@@ -413,38 +422,60 @@ function apriCorsa(id) {
       <label>Ippodromo<input data-f="ippodromo" list="dl-ippodromi" value="${esc(bozza.ippodromo)}"></label>
       <label>Classe<select data-f="classeId" required>${Object.values(S.classi).map(c => `<option value="${c.id}" ${c.id === bozza.classeId ? "selected" : ""}>${esc(c.nome)} (coeff. ${fmtN(c.coeff)})</option>`).join("")}</select></label>
       <label>Distanza (m)<input type="number" data-f="distanza" value="${esc(bozza.distanza)}"></label>
+      <label>Terreno<select data-f="terreno"><option value="">—</option>${TERRENI.map(t => `<option ${t === bozza.terreno ? "selected" : ""}>${t}</option>`).join("")}</select></label>
+      <label class="spunta"><input type="checkbox" data-f="handicap" ${bozza.handicap ? "checked" : ""}>Corsa a handicap</label>
     </div>
-    <h3>Iscritti, partenti e ordine d'arrivo <span class="meta" id="nIscritti"></span></h3>
-    <p class="hint">1) Spunta <b>Parte</b> per i partenti (usa la ricerca) e premi «Togli i non partenti». 2) Scrivi l'arrivo (<b>NA</b> per chi è partito e non è arrivato) e il distacco in lunghezze dal cavallo che precede (multipli di 0,25).</p>
-    <div class="toolbar" style="margin-bottom:8px;align-items:center"><input type="search" id="filtroIscritti" placeholder="Cerca un cavallo tra gli iscritti…" style="max-width:320px;margin:0" aria-label="Cerca tra gli iscritti">
-      <button type="button" class="btn" data-act="togli-non-partenti" id="btnTogli">Togli i non partenti</button></div>
-    <div class="scroll"><table class="runners"><thead><tr><th>Parte</th><th>Cavallo</th><th>Arrivo</th><th>Distacco</th><th>Steccato</th><th>Finimenti</th><th>Peso fantino</th><th>Fantino</th><th>Allenatore</th><th>Proprietario</th><th></th></tr></thead><tbody id="righe"></tbody></table></div>
-    <div class="toolbar" style="margin-top:10px"><button type="button" class="btn" data-act="aggiungi-partente">Aggiungi partente</button><button type="button" class="btn" data-act="ordina-arrivo">Ordina per arrivo</button></div>
-    <h3>Effetto sul rating</h3>
-    <div id="anteprima"></div>
+    <div id="sezione"></div>
+    <div id="sezioneCalcolo"><h3>Effetto sul rating</h3><div id="anteprima"></div></div>
     <div class="dlg-foot">${!bozza.nuova ? `<button type="button" class="btn danger" data-act="elimina-corsa">Elimina corsa</button>` : ""}<button class="btn primary">Salva corsa</button></div>
   </form>`;
-  renderRighe(); renderAnteprima();
+  renderSezione();
   const f = d.querySelector("form");
   f.addEventListener("input", e => {
     const t = e.target;
-    if (t.id === "filtroIscritti") return;
-    if (t.dataset.f) bozza[t.dataset.f] = t.value;
+    if (t.id === "filtroIscritti") return filtraRighe();
+    if (t.dataset.f) {
+      bozza[t.dataset.f] = t.type === "checkbox" ? t.checked : t.value;
+      if (t.dataset.f === "baseId") bozza.partecipanti.forEach(x => { x.verificato = false; });
+    }
     if (t.dataset.p) {
       const i = Number(t.closest("tr").dataset.i), p = bozza.partecipanti[i], k = t.dataset.p;
       p[k] = t.type === "checkbox" ? t.checked : t.value;
       if (k === "cavalloId" && t.value) { p.parte = true; precompila(p); renderRighe(); }
       if (k === "parte") { t.closest("tr").classList.toggle("parte", t.checked); aggiornaConteggi(); }
-      if (k === "posizione" && haArrivo(p) && !p.parte) { p.parte = true; const cb = t.closest("tr").querySelector('[data-p="parte"]'); if (cb) cb.checked = true; t.closest("tr").classList.add("parte"); aggiornaConteggi(); }
       // Cambiando arrivi o distacchi cambiano i rating di tutti: vanno riverificati
       if (k === "posizione" || k === "distacco") bozza.partecipanti.forEach(x => { x.verificato = false; });
       if (k === "ratingManuale") p.verificato = true;
     }
   });
-  f.addEventListener("change", e => { if (e.target.id !== "filtroIscritti") renderAnteprima(); });
-  document.getElementById("filtroIscritti").addEventListener("input", filtraRighe);
+  f.addEventListener("change", e => {
+    const k = e.target.dataset.f;
+    if (e.target.id === "filtroIscritti") return;
+    if (!fasePartenti() && ["handicap", "classeId", "data"].includes(k)) renderRighe();
+    renderAnteprima(); aggiornaRatingRighe();
+  });
   f.onsubmit = salvaCorsa;
   d.showModal();
+}
+function renderSezione() {
+  const el = document.getElementById("sezione");
+  if (!fasePartenti()) {
+    el.innerHTML = `<h3>Iscritti <span class="meta" id="nIscritti"></span></h3>
+    <p class="hint">Spunta <b>Parte</b> per i partenti (usa la ricerca) e premi «Togli i non partenti». Peso = rating attuale − coefficiente della classe (meno l'eventuale discarico). ${bozza.handicap ? "Corsa a handicap: ordine per rating, dal più alto." : "Ordine alfabetico."}</p>
+    <div class="toolbar" style="margin-bottom:8px;align-items:center"><input type="search" id="filtroIscritti" placeholder="Cerca un cavallo tra gli iscritti…" style="max-width:320px;margin:0" aria-label="Cerca tra gli iscritti">
+      <button type="button" class="btn primary" data-act="togli-non-partenti" id="btnTogli">Togli i non partenti</button></div>
+    <div class="scroll" style="max-height:520px"><table class="runners iscritti"><thead><tr><th>Parte</th><th>Cavallo</th><th class="num">Età</th><th class="num">Rating attuale</th><th class="num">Peso</th><th></th></tr></thead><tbody id="righe"></tbody></table></div>
+    <div class="toolbar" style="margin-top:10px"><button type="button" class="btn" data-act="aggiungi-partente">Aggiungi iscritto</button></div>`;
+    document.getElementById("sezioneCalcolo").hidden = true;
+  } else {
+    el.innerHTML = `<h3>Partenti e ordine d'arrivo <span class="meta" id="nIscritti"></span></h3>
+    <p class="hint">Scrivi l'arrivo (<b>NA</b> per chi è partito e non è arrivato) e il distacco in lunghezze dal cavallo che precede (multipli di 0,25), poi premi «Ordina per arrivo». Il rating dopo è proposto dal calcolo: scrivi un valore per deciderlo tu e spunta <b>Verificato</b> per ogni partente.</p>
+    <div id="boxVerifica"></div>
+    <div class="scroll"><table class="runners"><thead><tr><th>Arrivo</th><th>N.</th><th>Steccato</th><th>Cavallo</th><th>Distacco</th><th class="num">Rating prima</th><th class="num">Rating dopo</th><th>Verificato</th><th>Finimenti</th><th>Note</th><th>Peso fantino</th><th>Fantino</th><th>Allenatore</th><th>Proprietario</th><th></th></tr></thead><tbody id="righe"></tbody></table></div>
+    <div class="toolbar" style="margin-top:10px"><button type="button" class="btn primary" data-act="ordina-arrivo">Ordina per arrivo</button><button type="button" class="btn" data-act="aggiungi-partente">Aggiungi partente</button></div>`;
+    document.getElementById("sezioneCalcolo").hidden = false;
+  }
+  renderRighe(); renderAnteprima();
 }
 function precompila(r) {
   const c = S.cavalli[r.cavalloId]; if (!c) return;
@@ -457,31 +488,85 @@ function precompila(r) {
 const chiaveArrivo = p => { const n = Number(p.posizione); return n > 0 ? n : String(p.posizione ?? "").trim() ? 900 : 999; };
 function aggiornaConteggi() {
   const tutti = bozza.partecipanti.filter(p => p.cavalloId || p.nomeNuovo);
+  const el = document.getElementById("nIscritti");
+  if (fasePartenti()) { el.textContent = tutti.length ? `(${tutti.length})` : ""; return; }
   const partenti = tutti.filter(p => p.parte).length, fuori = tutti.length - partenti;
-  document.getElementById("nIscritti").textContent = tutti.length ? `(${tutti.length} in elenco · ${partenti} partenti)` : "";
+  el.textContent = tutti.length ? `(${tutti.length} in elenco · ${partenti} partenti)` : "";
   const b = document.getElementById("btnTogli");
-  if (b) { b.textContent = fuori && partenti ? `Togli i non partenti (${fuori})` : "Togli i non partenti"; b.disabled = !partenti || !fuori; }
+  if (b) { b.textContent = fuori && partenti ? `Togli i non partenti (${fuori})` : "Togli i non partenti"; b.disabled = !partenti; }
 }
 function filtraRighe() {
   const q = norm(document.getElementById("filtroIscritti")?.value);
   document.querySelectorAll("#righe tr").forEach(tr => { tr.style.display = !q || tr.dataset.nome.includes(q) ? "" : "none"; });
 }
+// Ordine di visualizzazione degli iscritti: handicap = rating dal più alto, altrimenti alfabetico
+function ordineIscritti(res) {
+  const idx = bozza.partecipanti.map((p, i) => i);
+  const rat = i => res.get(bozza.partecipanti[i])?.pre;
+  const vuoto = i => !(bozza.partecipanti[i].cavalloId || bozza.partecipanti[i].nomeNuovo);
+  const alfa = (a, b) => nomeP(bozza.partecipanti[a]).localeCompare(nomeP(bozza.partecipanti[b]), "it");
+  return idx.sort((a, b) => vuoto(a) - vuoto(b) || (bozza.handicap ? ((rat(b) ?? -Infinity) - (rat(a) ?? -Infinity)) : 0) || alfa(a, b));
+}
+function ordinePartenti() {
+  const P = bozza.partecipanti;
+  return P.map((p, i) => i).sort((a, b) => chiaveArrivo(P[a]) - chiaveArrivo(P[b]) || (Number(P[a].numero) || 999) - (Number(P[b].numero) || 999) || a - b);
+}
+function cellaCavallo(p, opts) {
+  return p.cavalloId || p.nomeNuovo ? `<b>${esc(nomeP(p))}</b>${p.nomeNuovo ? ` <span class="tag">nuovo</span>` : ""}`
+    : `<select data-p="cavalloId" class="wide" aria-label="Cavallo"><option value="">Scegli…</option>${opts.map(c => `<option value="${c.id}">${esc(c.nome)}</option>`).join("")}</select>`;
+}
 function renderRighe() {
   const opts = cavalliOrdinati();
-  document.getElementById("righe").innerHTML = bozza.partecipanti.map((p, i) => `<tr data-i="${i}" data-nome="${esc(norm(nomeP(p)))}" class="${p.parte ? "parte" : ""}">
-    <td class="num"><input type="checkbox" data-p="parte" ${p.parte ? "checked" : ""} aria-label="Parte" style="width:20px;height:20px;margin:0"></td>
-    <td>${p.cavalloId || p.nomeNuovo ? `<b>${esc(nomeP(p))}</b>${p.nomeNuovo ? ` <span class="tag">nuovo</span>` : ""}` : `<select data-p="cavalloId" class="wide" aria-label="Cavallo"><option value="">Scegli…</option>${opts.map(c => `<option value="${c.id}">${esc(c.nome)}</option>`).join("")}</select>`}</td>
-    <td><input type="text" inputmode="numeric" maxlength="3" class="pos" data-p="posizione" value="${esc(p.posizione)}" aria-label="Posizione d'arrivo" placeholder="—"></td>
-    <td><input type="number" min="0" step="0.25" data-p="distacco" value="${esc(p.distacco)}" aria-label="Distacco"></td>
-    <td><input type="number" min="1" data-p="steccato" value="${esc(p.steccato)}" aria-label="Numero steccato"></td>
-    <td><input data-p="finimenti" list="dl-finimenti" class="wide" value="${esc(p.finimenti)}" aria-label="Finimenti"></td>
-    <td><input type="number" step="0.5" data-p="pesoFantino" value="${esc(p.pesoFantino)}" aria-label="Peso fantino"></td>
-    <td><input data-p="fantino" list="dl-fantini" class="wide" value="${esc(p.fantino)}" aria-label="Fantino"></td>
-    <td><input data-p="allenatore" list="dl-allenatori" class="wide" value="${esc(p.allenatore)}" aria-label="Allenatore"></td>
-    <td><input data-p="proprietario" list="dl-proprietari" class="wide" value="${esc(p.proprietario)}" aria-label="Proprietario"></td>
-    <td><button type="button" class="btn small danger" data-act="rimuovi-partente" aria-label="Rimuovi partente">✕</button></td></tr>`).join("");
+  const res = new Map(risultatiBozza().map(r => [r.p, r]));
+  const P = bozza.partecipanti;
+  const tb = document.getElementById("righe");
+  if (!fasePartenti()) {
+    tb.innerHTML = ordineIscritti(res).map(i => { const p = P[i], r = res.get(p);
+      return `<tr data-i="${i}" data-nome="${esc(norm(nomeP(p)))}" class="${p.parte ? "parte" : ""}">
+      <td class="num"><input type="checkbox" data-p="parte" ${p.parte ? "checked" : ""} aria-label="Parte" class="cb"></td>
+      <td class="c-nome">${cellaCavallo(p, opts)}</td>
+      <td class="num">${r ? etaTesto(r.eta) : ""}</td>
+      <td class="num">${r ? fmtRating(r.pre) : ""}</td>
+      <td class="num"><b>${r ? fmtN(r.pesoAssegnato) : ""}</b>${r?.discarico ? ` <span class="meta">(disc. ${fmtN(r.discarico)})</span>` : ""}</td>
+      <td><button type="button" class="btn small danger" data-act="rimuovi-partente" aria-label="Rimuovi">✕</button></td></tr>`; }).join("");
+  } else {
+    tb.innerHTML = ordinePartenti().map(i => { const p = P[i];
+      return `<tr data-i="${i}" data-nome="${esc(norm(nomeP(p)))}">
+      <td><input type="text" inputmode="numeric" maxlength="3" class="pos" data-p="posizione" value="${esc(p.posizione)}" aria-label="Posizione d'arrivo" placeholder="—"></td>
+      <td><input type="number" min="1" class="pos" data-p="numero" value="${esc(p.numero)}" aria-label="Numero di partenza"></td>
+      <td><input type="number" min="1" class="pos" data-p="steccato" value="${esc(p.steccato)}" aria-label="Steccato"></td>
+      <td class="c-nome">${cellaCavallo(p, opts)}</td>
+      <td><input type="number" min="0" step="0.25" class="pos" data-p="distacco" value="${esc(p.distacco)}" aria-label="Distacco"></td>
+      <td class="num c-prima"></td>
+      <td class="num"><input type="number" step="0.25" class="manuale" data-p="ratingManuale" value="${esc(haManuale(p.ratingManuale) ? p.ratingManuale : "")}" aria-label="Rating dopo"></td>
+      <td class="c-verif"></td>
+      <td><input data-p="finimenti" list="dl-finimenti" class="wide" value="${esc(p.finimenti)}" aria-label="Finimenti"></td>
+      <td><input data-p="note" class="wide" value="${esc(p.note)}" aria-label="Note"></td>
+      <td><input type="number" step="0.5" class="pos" data-p="pesoFantino" value="${esc(p.pesoFantino)}" aria-label="Peso fantino"></td>
+      <td><input data-p="fantino" list="dl-fantini" class="wide" value="${esc(p.fantino)}" aria-label="Fantino"></td>
+      <td><input data-p="allenatore" list="dl-allenatori" class="wide" value="${esc(p.allenatore)}" aria-label="Allenatore"></td>
+      <td><input data-p="proprietario" list="dl-proprietari" class="wide" value="${esc(p.proprietario)}" aria-label="Proprietario"></td>
+      <td><button type="button" class="btn small danger" data-act="rimuovi-partente" aria-label="Rimuovi partente">✕</button></td></tr>`; }).join("");
+    aggiornaRatingRighe(res);
+  }
   aggiornaConteggi();
   filtraRighe();
+}
+// Aggiorna rating e verifica nelle righe dei partenti senza ridisegnarle (non perde il campo attivo)
+function aggiornaRatingRighe(res) {
+  if (!fasePartenti()) return;
+  res = res || new Map(risultatiBozza().map(r => [r.p, r]));
+  document.querySelectorAll("#righe tr").forEach(tr => {
+    const p = bozza.partecipanti[Number(tr.dataset.i)], r = res.get(p);
+    tr.classList.toggle("verifica", daVerificare(p));
+    tr.classList.toggle("alert", !!r && fuoriSoglia(r.delta));
+    tr.querySelector(".c-prima").innerHTML = r ? fmtRating(r.pre) : "";
+    const m = tr.querySelector('[data-p="ratingManuale"]');
+    m.placeholder = r ? fmtN(r.calcolato) : ""; m.classList.toggle("attivo", !!r?.manuale);
+    tr.querySelector(".c-verif").innerHTML = haArrivo(p) ? `<label class="spunta" style="margin:0"><input type="checkbox" data-p="verificato" ${p.verificato ? "checked" : ""} class="cb">${p.verificato ? "Sì" : "<b>Da verificare</b>"}</label>` : "";
+  });
+  const nv = bozza.partecipanti.filter(daVerificare).length;
+  document.getElementById("boxVerifica").innerHTML = nv ? `<div class="notice verifica-box"><b>${nv} rating da verificare</b> <button type="button" class="btn small" data-act="verifica-tutti" style="margin-left:10px">Segna tutti come verificati</button></div>` : "";
 }
 function risultatiBozza() {
   const altre = Object.values(S.corse).filter(k => k.id !== bozza.id);
@@ -489,20 +574,25 @@ function risultatiBozza() {
   return (perCorsa[bozza.id] || []).sort((a, b) => chiaveArrivo(a.p) - chiaveArrivo(b.p));
 }
 function renderAnteprima() {
+  if (!fasePartenti()) return;
   const res = risultatiBozza();
   const el = document.getElementById("anteprima");
-  if (!res.length) { el.innerHTML = `<p class="meta">Scegli i cavalli per vedere pesi e variazioni.</p>`; return; }
-  const nv = res.filter(r => daVerificare(r.p)).length;
-  el.innerHTML = `<p class="hint" style="margin:0 0 8px">Il rating dopo è proposto dal calcolo. Scrivi un valore per deciderlo tu; svuota il campo per tornare al calcolo. Ogni partente va controllato e spuntato in <b>Verificato</b>: le righe non verificate restano evidenziate.</p>
-  ${nv ? `<div class="notice verifica-box"><b>${nv} ${nv === 1 ? "rating da verificare" : "rating da verificare"}</b> <button type="button" class="btn small" data-act="verifica-tutti" style="margin-left:10px">Segna tutti come verificati</button></div>` : ""}
-  <div class="scroll"><table><thead><tr><th>Arrivo</th><th>Cavallo</th><th class="num">Rating prima</th><th class="num">Peso assegnato</th><th class="num">Kg dal 1°</th><th class="num">Calcolato</th><th class="num">Rating dopo</th><th class="num">Variazione</th><th>Verificato</th></tr></thead><tbody>
-  ${res.map(r => `<tr data-i="${bozza.partecipanti.indexOf(r.p)}" class="${daVerificare(r.p) ? "verifica" : ""} ${fuoriSoglia(r.delta) ? "alert" : ""}"><td>${Number(r.p.posizione) > 0 ? `<span class="cloth pos">${esc(r.p.posizione)}</span>` : String(r.p.posizione ?? "").trim() ? `<span class="cloth none">NA</span>` : `<span class="cloth none">—</span>`}</td><td>${esc(nomeP(r.p))}${r.p.nomeNuovo ? ` <span class="tag">nuovo</span>` : ""}${r.fuoriClasse ? `<span class="warn">Rating fuori dai limiti della classe</span>` : ""}${fuoriSoglia(r.delta) ? `<span class="warn">Variazione oltre ±${fmtN(R().sogliaAvviso)} kg</span>` : ""}</td>
-  <td class="num">${fmtRating(r.pre)}</td><td class="num">${fmtN(r.pesoAssegnato)}${r.discarico ? `<br><span class="meta">disc. ${fmtN(r.discarico)} (${etaTesto(r.eta)} anni)</span>` : ""}</td><td class="num">${r.kgCum !== undefined ? fmtN(r.kgCum) : "—"}</td>
+  if (!res.length) { el.innerHTML = `<p class="meta">Aggiungi i partenti per vedere pesi e variazioni.</p>`; return; }
+  const arrivati = res.filter(r => Number(r.p.posizione) > 0);
+  if (bozza.baseId && !arrivati.some(r => idP(r.p) === bozza.baseId)) bozza.baseId = "";
+  const base = arrivati.find(r => idP(r.p) === bozza.baseId);
+  el.innerHTML = `<div class="panel base-box">
+    <label>Cavallo base<select data-f="baseId" style="max-width:340px"><option value="">Nessuno (calcolo dal vincitore)</option>${arrivati.map(r => `<option value="${esc(idP(r.p))}" ${idP(r.p) === bozza.baseId ? "selected" : ""}>${esc(r.p.posizione)}° · ${esc(nomeP(r.p))}</option>`).join("")}</select></label>
+    <p class="hint" style="margin:6px 0 0">${base ? `Il rating di <b>${esc(nomeP(base.p))}</b> resta invariato. Chi è arrivato dopo perde i kg di distacco dal base, chi è arrivato prima li guadagna.` : "Scegli il cavallo che ha corso secondo il suo valore: i distacchi si misurano da lui, in più per chi arriva prima e in meno per chi arriva dopo."}</p></div>
+  <div class="scroll" style="margin-top:10px"><table><thead><tr><th>Arrivo</th><th>Cavallo</th><th class="num">Rating prima</th><th class="num">Peso assegnato</th><th class="num">Kg ${base ? "dal base" : "dal 1°"}</th><th class="num">Calcolato</th><th class="num">Rating dopo</th><th class="num">Variazione</th></tr></thead><tbody>
+  ${res.map(r => `<tr class="${daVerificare(r.p) ? "verifica" : ""} ${fuoriSoglia(r.delta) ? "alert" : ""} ${base && r.p === base.p ? "base" : ""}"><td>${Number(r.p.posizione) > 0 ? `<span class="cloth pos">${esc(r.p.posizione)}</span>` : haArrivo(r.p) ? `<span class="cloth none">NA</span>` : `<span class="cloth none">—</span>`}</td>
+  <td>${esc(nomeP(r.p))}${base && r.p === base.p ? ` <span class="tag">base</span>` : ""}${r.p.nomeNuovo ? ` <span class="tag">nuovo</span>` : ""}${r.fuoriClasse ? `<span class="warn">Rating fuori dai limiti della classe</span>` : ""}${fuoriSoglia(r.delta) ? `<span class="warn">Variazione oltre ±${fmtN(R().sogliaAvviso)} kg</span>` : ""}</td>
+  <td class="num">${fmtRating(r.pre)}</td><td class="num">${fmtN(r.pesoAssegnato)}${r.discarico ? `<br><span class="meta">disc. ${fmtN(r.discarico)} (${etaTesto(r.eta)} anni)</span>` : ""}</td><td class="num">${r.kgRif !== undefined ? segnoKg(r.kgRif, !!base) : "—"}</td>
   <td class="num">${fmtN(r.calcolato)} <span class="meta">(${segno(r.deltaCalcolato)})</span></td>
-  <td class="num"><input type="number" step="0.25" class="manuale${r.manuale ? " attivo" : ""}" data-p="ratingManuale" value="${esc(r.manuale ? r.p.ratingManuale : "")}" placeholder="${fmtN(r.calcolato)}" aria-label="Rating dopo deciso a mano">${r.manuale ? `<span class="tag">a mano</span>` : ""}</td>
-  <td class="num ${cls(r.delta)}">${segno(r.delta)}</td>
-  <td>${haArrivo(r.p) ? `<label style="display:flex;gap:6px;align-items:center;color:var(--ink);margin:0"><input type="checkbox" data-p="verificato" ${r.p.verificato ? "checked" : ""} style="width:20px;height:20px;margin:0">${r.p.verificato ? "Sì" : "<b>Da verificare</b>"}</label>` : ""}</td></tr>`).join("")}</tbody></table></div>`;
+  <td class="num rating">${fmtN(r.post)}${r.manuale ? ` <span class="tag">a mano</span>` : ""}</td>
+  <td class="num ${cls(r.delta)}">${segno(r.delta)}</td></tr>`).join("")}</tbody></table></div>`;
 }
+const segnoKg = (k, conBase) => conBase ? (k > 0 ? "+" + fmtN(k) : k < 0 ? "−" + fmtN(-k) : "0") : fmtN(k);
 function salvaCorsa(e) {
   e.preventDefault();
   const parts = bozza.partecipanti.filter(p => p.cavalloId || p.nomeNuovo);
@@ -511,24 +601,28 @@ function salvaCorsa(e) {
   const ids = parts.map(p => p.cavalloId || "n:" + chiave(p.nomeNuovo));
   if (new Set(ids).size !== ids.length) return toast("Un cavallo compare due volte");
   const nuovi = parts.filter(p => p.nomeNuovo && !p.cavalloId);
-  if (nuovi.length > 30 && !confirm(`Ci sono ancora ${nuovi.length} iscritti nuovi nella corsa: salvando verranno tutti creati in archivio. Di solito prima si preme «Ordina per arrivo» per lasciare solo i partenti. Salvare comunque?`)) return;
+  if (nuovi.length > 30 && !confirm(`Ci sono ancora ${nuovi.length} iscritti nuovi nella corsa: salvando verranno tutti creati in archivio. Di solito prima si preme «Togli i non partenti» per lasciare solo i partenti. Salvare comunque?`)) return;
   const stecc = parts.map(p => p.steccato).filter(Boolean);
   if (new Set(stecc).size !== stecc.length) return toast("Due cavalli hanno lo stesso steccato");
+  const nums = parts.map(p => p.numero).filter(Boolean);
+  if (new Set(nums).size !== nums.length) return toast("Due cavalli hanno lo stesso numero di partenza");
   const nonVerif = parts.filter(daVerificare);
   if (nonVerif.length) {
-    renderAnteprima();
-    document.getElementById("anteprima").scrollIntoView({ behavior: "smooth", block: "start" });
+    aggiornaRatingRighe();
+    document.getElementById("righe").scrollIntoView({ behavior: "smooth", block: "start" });
     if (!confirm(`${nonVerif.length} ${nonVerif.length === 1 ? "partente ha" : "partenti hanno"} il rating non ancora verificato (righe evidenziate):\n\n${nonVerif.map(nomeP).join(", ")}\n\nSalvare comunque? La corsa resterà segnata «da verificare».`)) return;
   }
   const avvisi = risultatiBozza().filter(r => fuoriSoglia(r.delta));
   if (avvisi.length && !confirm(`Attenzione, variazione di rating oltre ±${fmtN(R().sogliaAvviso)} kg:\n\n${avvisi.map(r => `${nomeP(r.p)}: ${fmtN(r.pre)} → ${fmtN(r.post)} (${segno(r.delta)})`).join("\n")}\n\nSalvare comunque?`)) return;
   for (const p of nuovi) {
+    const vecchioId = idP(p);
     let c = Object.values(S.cavalli).find(y => chiave(y.nome) === chiave(p.nomeNuovo));
     if (!c) {
       c = { id: uid(), nome: p.nomeNuovo, annoNascita: "", razza: "", ratingIniziale: "", proprietario: "", allenatore: "", note: `Creato dagli iscritti del ${fmtData(bozza.data)}` };
       S.cavalli[c.id] = c;
     }
     p.cavalloId = c.id; delete p.nomeNuovo;
+    if (bozza.baseId === vecchioId) bozza.baseId = c.id;
   }
   const obj = { ...bozza, partecipanti: parts }; delete obj.nuova;
   S.corse[obj.id] = obj; bozza = { ...obj };
@@ -683,7 +777,7 @@ function impRender() {
     ${simili.length ? `<h3>Forse già in archivio (${simili.length})</h3><p class="hint">Nomi che differiscono di una lettera da un cavallo in archivio. Spunta quelli che sono lo stesso cavallo.</p>
       <div class="scroll"><table><tbody>${simili.map((x, i) => `<tr><td style="width:40px"><input type="checkbox" data-simile="${i}" style="width:20px;height:20px;margin:0" aria-label="Associa"></td><td>${esc(nomePulito(x.nome))}</td><td>→ è <b>${esc(x.c.nome)}</b></td></tr>`).join("")}</tbody></table></div>` : ""}
     ${nuovi.length ? `<details style="margin-top:6px"><summary>Nuovi (${nuovi.length})</summary><p class="meta">${nuovi.map(n => esc(nomePulito(n))).join(", ")}</p></details>` : ""}
-    <label style="margin-top:14px;display:flex;gap:8px;align-items:center;color:var(--ink)"><input type="checkbox" id="impCompila" checked style="width:auto;margin:0">Compila data, ippodromo, nome${cl ? ", classe" : ""} e distanza della corsa</label>
+    <label style="margin-top:14px;display:flex;gap:8px;align-items:center;color:var(--ink)"><input type="checkbox" id="impCompila" checked style="width:auto;margin:0">Compila data, ippodromo, nome${cl ? ", classe" : ""}, distanza e handicap della corsa</label>
     <div class="dlg-foot"><button type="button" class="btn primary" data-act="imp-conferma">Aggiungi ${c.nomi.length} iscritti alla corsa</button></div>`;
   const sel = document.getElementById("impCorsa");
   if (sel) sel.onchange = () => { importo.sel = Number(sel.value); impRender(); };
@@ -693,6 +787,8 @@ function impConferma() {
   if (document.getElementById("impCompila").checked) {
     const cl = c.classe ? Object.values(S.classi).find(x => norm(x.nome) === norm(c.classe)) : null;
     const campi = { data: a.data, ippodromo: a.ippodromo ? titolo(a.ippodromo) : "", nome: c.nome ? titolo(c.nome) : "", distanza: c.distanza, classeId: cl?.id };
+    bozza.handicap = /handicap/i.test(c.intestazione || "");
+    const h = document.querySelector('#dlgCorsa [data-f="handicap"]'); if (h) h.checked = bozza.handicap;
     for (const [k, v] of Object.entries(campi)) {
       if (!v) continue;
       bozza[k] = v;
@@ -714,7 +810,8 @@ function impConferma() {
     bozza.partecipanti.push({ ...nuovoPartente(), nomeNuovo: nomePulito(nome) }); n++;
   }
   document.getElementById("dlgImport").close();
-  renderRighe(); renderAnteprima();
+  bozza.fasePartenti = false;
+  renderSezione();
   toast(`${n} iscritti aggiunti. Spunta i partenti e premi «Togli i non partenti»`);
 }
 
@@ -809,20 +906,33 @@ function excelCorsa() {
   const res = risultatiBozza();
   if (!res.length) return toast("Aggiungi almeno un cavallo per esportare");
   const cl = S.classi[bozza.classeId];
-  const titolo = [bozza.nome || "Corsa", bozza.ippodromo].filter(Boolean).join(", ");
+  const titoloC = [bozza.nome || "Corsa", bozza.ippodromo].filter(Boolean).join(", ");
+  const t = v => v === null || v === undefined ? "" : tondo(v);
+  const info = [fmtData(bozza.data), cl ? `${cl.nome} (coefficiente ${fmtN(cl.coeff)})` : "", bozza.handicap ? "Handicap" : "", bozza.distanza ? `${bozza.distanza} m` : "", bozza.terreno ? `terreno ${bozza.terreno}` : ""];
+  const nf = `${fmtData(bozza.data).replace(/\//g, "-")} ${bozza.nome || ""}`.trim();
+  if (!fasePartenti()) {
+    const m = new Map(res.map(r => [r.p, r]));
+    const righe = ordineIscritti(m).map(i => bozza.partecipanti[i]).filter(p => p.cavalloId || p.nomeNuovo);
+    return esporta({ nomeFile: `Iscritti ${nf}`, fogli: [{ nome: "Iscritti", titolo: `Iscritti: ${titoloC}`,
+      sottotitolo: [...info, `${righe.length} iscritti`, bozza.handicap ? "ordine per rating" : "ordine alfabetico"].filter(Boolean).join(", "),
+      colonne: [{ titolo: "N.", larghezza: 6, num: 1 }, { titolo: "Cavallo", larghezza: 28 }, { titolo: "Età", larghezza: 6, num: 1 }, { titolo: "Rating attuale", larghezza: 12, num: 1 }, { titolo: "Discarico (kg)", larghezza: 11, num: 1 }, { titolo: "Peso (kg)", larghezza: 10, num: 1 }, { titolo: "Parte", larghezza: 8 }],
+      righe: righe.map((p, i) => { const r = m.get(p); return [i + 1, nomeP(p), etaTesto(r?.eta), r?.pre === null ? "da valutare" : t(r?.pre), r?.discarico || "", t(r?.pesoAssegnato), p.parte ? "Sì" : ""]; }) }] });
+  }
+  const base = res.find(r => idP(r.p) === bozza.baseId);
   esporta({
-    nomeFile: `Corsa ${fmtData(bozza.data).replace(/\//g, "-")} ${bozza.nome || ""}`.trim(),
+    nomeFile: `Corsa ${nf}`,
     fogli: [{
-      nome: "Corsa", titolo,
-      sottotitolo: [fmtData(bozza.data), cl ? `${cl.nome} (coefficiente ${fmtN(cl.coeff)})` : "", bozza.distanza ? `${bozza.distanza} m` : "", `${res.length} partenti`].filter(Boolean).join(", "),
-      colonne: [{ titolo: "Arrivo", larghezza: 7, num: 1 }, { titolo: "Cavallo", larghezza: 24 }, { titolo: "Età", larghezza: 6, num: 1 }, { titolo: "Distacco (lungh.)", larghezza: 10, num: 1 }, { titolo: "Kg dal 1°", larghezza: 9, num: 1 },
-        { titolo: "Steccato", larghezza: 9, num: 1 }, { titolo: "Finimenti", larghezza: 18 }, { titolo: "Discarico (kg)", larghezza: 10, num: 1 }, { titolo: "Peso assegnato (kg)", larghezza: 11, num: 1 }, { titolo: "Peso fantino (kg)", larghezza: 11, num: 1 },
-        { titolo: "Fantino", larghezza: 20 }, { titolo: "Allenatore", larghezza: 20 }, { titolo: "Proprietario", larghezza: 22 },
-        { titolo: "Rating prima", larghezza: 10, num: 1 }, { titolo: "Rating calcolato", larghezza: 10, num: 1 }, { titolo: "Rating dopo", larghezza: 10, num: 1 }, { titolo: "Deciso a mano", larghezza: 9 }, { titolo: "Variazione", larghezza: 10, num: 1 }],
+      nome: "Corsa", titolo: titoloC,
+      sottotitolo: [...info, `${res.length} partenti`, base ? `cavallo base: ${nomeP(base.p)}` : ""].filter(Boolean).join(", "),
+      colonne: [{ titolo: "Arrivo", larghezza: 7, num: 1 }, { titolo: "N. partenza", larghezza: 8, num: 1 }, { titolo: "Steccato", larghezza: 8, num: 1 }, { titolo: "Cavallo", larghezza: 24 }, { titolo: "Distacco (lungh.)", larghezza: 10, num: 1 },
+        { titolo: "Rating prima", larghezza: 10, num: 1 }, { titolo: "Rating dopo", larghezza: 10, num: 1 }, { titolo: "Finimenti", larghezza: 18 }, { titolo: "Note", larghezza: 26 },
+        { titolo: "Età", larghezza: 6, num: 1 }, { titolo: "Discarico (kg)", larghezza: 10, num: 1 }, { titolo: "Peso assegnato (kg)", larghezza: 11, num: 1 }, { titolo: base ? "Kg dal base" : "Kg dal 1°", larghezza: 9, num: 1 },
+        { titolo: "Rating calcolato", larghezza: 10, num: 1 }, { titolo: "Deciso a mano", larghezza: 9 }, { titolo: "Variazione", larghezza: 10, num: 1 },
+        { titolo: "Peso fantino (kg)", larghezza: 11, num: 1 }, { titolo: "Fantino", larghezza: 20 }, { titolo: "Allenatore", larghezza: 20 }, { titolo: "Proprietario", larghezza: 22 }],
       righe: res.map(r => { const p = r.p, arr = Number(p.posizione) > 0;
-        const t = v => v === null || v === undefined ? "" : tondo(v);
-        return [arr ? Number(p.posizione) : "N.A.", nomeP(p), etaTesto(r.eta), arr && Number(p.posizione) > 1 ? Number(p.distacco) || 0 : "", r.kgCum !== undefined ? tondo(r.kgCum) : "",
-          p.steccato ? Number(p.steccato) : "", p.finimenti, r.discarico || "", t(r.pesoAssegnato), p.pesoFantino ? Number(p.pesoFantino) : "", p.fantino, p.allenatore, p.proprietario, r.pre === null ? "da valutare" : t(r.pre), t(r.calcolato), t(r.post), r.manuale ? "Sì" : "", t(r.delta)]; }),
+        return [arr ? Number(p.posizione) : haArrivo(p) ? "N.A." : "", p.numero ? Number(p.numero) : "", p.steccato ? Number(p.steccato) : "", nomeP(p) + (base && p === base.p ? " (base)" : ""), arr && Number(p.posizione) > 1 ? Number(p.distacco) || 0 : "",
+          r.pre === null ? "da valutare" : t(r.pre), t(r.post), p.finimenti, p.note, etaTesto(r.eta), r.discarico || "", t(r.pesoAssegnato), r.kgRif !== undefined ? tondo(r.kgRif) : "",
+          t(r.calcolato), r.manuale ? "Sì" : "", t(r.delta), p.pesoFantino ? Number(p.pesoFantino) : "", p.fantino, p.allenatore, p.proprietario]; }),
     }],
   });
 }
@@ -846,25 +956,21 @@ document.addEventListener("click", async e => {
       case "oggi": dataRif = oggi(); return render();
       case "excel-classifica": return excelClassifica();
       case "excel-corsa": return excelCorsa();
-      case "aggiungi-partente": bozza.partecipanti.push(nuovoPartente()); return renderRighe();
+      case "aggiungi-partente": bozza.partecipanti.push({ ...nuovoPartente(), parte: true }); return renderRighe();
       case "rimuovi-partente": bozza.partecipanti.splice(Number(a.closest("tr").dataset.i), 1); renderRighe(); return renderAnteprima();
-      case "ordina-arrivo": {
-        const senza = bozza.partecipanti.filter(p => (p.cavalloId || p.nomeNuovo) && !String(p.posizione ?? "").trim());
-        if (senza.length && !confirm(`Togliere dalla corsa ${senza.length} ${senza.length === 1 ? "iscritto" : "iscritti"} senza ordine d'arrivo?`)) return;
-        bozza.partecipanti = bozza.partecipanti.filter(p => (p.cavalloId || p.nomeNuovo) && String(p.posizione ?? "").trim()).sort((x, y) => chiaveArrivo(x) - chiaveArrivo(y));
-        const fq = document.getElementById("filtroIscritti"); if (fq) fq.value = "";
-        renderRighe(); return renderAnteprima();
-      }
+      case "ordina-arrivo": return renderRighe();
       case "importa-iscritti": return apriImport();
       case "togli-non-partenti": {
-        const fuori = bozza.partecipanti.filter(p => !p.parte);
-        if (!fuori.length) return;
-        if (!confirm(`Togliere dalla corsa ${fuori.length} ${fuori.length === 1 ? "iscritto non partente" : "iscritti non partenti"}?`)) return;
-        bozza.partecipanti = bozza.partecipanti.filter(p => p.parte);
-        const fq = document.getElementById("filtroIscritti"); if (fq) fq.value = "";
-        renderRighe(); return renderAnteprima();
+        const fuori = bozza.partecipanti.filter(p => !p.parte || !(p.cavalloId || p.nomeNuovo));
+        if (!bozza.partecipanti.some(p => p.parte)) return toast("Spunta prima i partenti");
+        if (fuori.length && !confirm(`Togliere dalla corsa ${fuori.length} ${fuori.length === 1 ? "iscritto non partente" : "iscritti non partenti"}?`)) return;
+        // In handicap i partenti restano nell'ordine di rating, altrimenti alfabetico, finché non scrivi l'arrivo
+        const res = new Map(risultatiBozza().map(r => [r.p, r]));
+        bozza.partecipanti = ordineIscritti(res).map(i => bozza.partecipanti[i]).filter(p => p.parte && (p.cavalloId || p.nomeNuovo));
+        bozza.fasePartenti = true;
+        return renderSezione();
       }
-      case "verifica-tutti": bozza.partecipanti.forEach(p => { if (haArrivo(p)) p.verificato = true; }); return renderAnteprima();
+      case "verifica-tutti": bozza.partecipanti.forEach(p => { if (haArrivo(p)) p.verificato = true; }); renderAnteprima(); return aggiornaRatingRighe();
       case "importa-cavalli": return importaCavalli();
       case "imp-cav-conferma": return confermaImportCavalli();
       case "imp-leggi": return impLeggi();

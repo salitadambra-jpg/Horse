@@ -97,9 +97,15 @@ td.num{white-space:nowrap}
 tr.alert td{background:var(--warn-bg)}
 input.pos{width:56px;min-width:56px;text-align:center}
 .notice a{color:inherit;font-weight:600}
-.runners td:first-child{min-width:180px}
+.runners td.c-nome{min-width:170px}
 tr.verifica td{background:color-mix(in srgb,var(--silk) 22%,transparent)}
 tr.verifica td:first-child{box-shadow:inset 4px 0 0 var(--silk)}
 tr.parte td{background:color-mix(in srgb,var(--turf) 9%,transparent)}
 .tag.avviso{background:var(--silk)}
 .verifica-box{display:flex;align-items:center;flex-wrap:wrap;gap:6px}
+label.spunta{display:flex;gap:8px;align-items:center;color:var(--ink);align-self:end;padding-bottom:10px}
+label.spunta input,input.cb{width:20px;height:20px;margin:0}
+tr.base td{font-weight:600}
+.runners input.pos{width:64px;min-width:64px}
+.runners.iscritti td{padding:8px 10px}
+.c-verif label{white-space:nowrap}
